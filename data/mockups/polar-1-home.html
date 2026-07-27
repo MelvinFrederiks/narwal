@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>Crackalyzer — polar mockup 1</title>
+  <link rel="stylesheet" href="_polar.css"/>
+  <style>
+    .hero {
+      display: grid; grid-template-columns: 1fr 360px; gap: 24px;
+      align-items: stretch;
+    }
+    .hero-text h1 {
+      font-size: 30px; font-weight: 600; margin: 0 0 6px; letter-spacing: -0.3px;
+    }
+    .hero-text .lead {
+      color: var(--text-secondary); font-size: 14px; max-width: 540px;
+    }
+    .hero-text .glob {
+      margin-top: 18px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center;
+    }
+    .glob .stat {
+      background: var(--success-bg); color: var(--success-text);
+      padding: 6px 12px; border-radius: 20px; font-size: 13px; font-weight: 500;
+    }
+    .glob .stat strong { font-size: 15px; }
+    .scoreboard {
+      background: linear-gradient(180deg, #d6ecf6, #b9defa);
+      border: 0.5px solid var(--border); border-radius: var(--radius-lg);
+      padding: 18px; position: relative; overflow: hidden;
+      box-shadow: var(--shadow-md);
+    }
+    .scoreboard .label {
+      font-size: 11px; letter-spacing: 1px; text-transform: uppercase;
+      color: var(--text-secondary); font-weight: 500;
+    }
+    .scoreboard .big {
+      font-size: 40px; font-weight: 700; line-height: 1.1; color: var(--text);
+      font-variant-numeric: tabular-nums; margin: 6px 0 4px;
+    }
+    .scoreboard .small {
+      font-size: 12px; color: var(--text-secondary);
+    }
+    .scoreboard .bear-tray {
+      display: flex; gap: 4px; align-items: flex-end; margin-top: 14px;
+      flex-wrap: wrap;
+    }
+    .scoreboard .bear-tray .bear { width: 26px; height: 26px; }
+    .scoreboard .progress {
+      margin-top: 16px; height: 8px;
+      background: #ffffff; border-radius: 5px; overflow: hidden;
+    }
+    .scoreboard .progress > i {
+      display: block; height: 100%;
+      background: linear-gradient(90deg, #1f7a38, #5fb96a);
+      width: 87%;
+    }
+    .scoreboard .floor {
+      margin-top: 8px; display: flex; justify-content: space-between;
+      font-size: 11px; color: var(--text-secondary);
+    }
+
+    .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 20px; }
+    .grid .card {
+      background: var(--surface-2); border: 0.5px solid var(--surface-3);
+      border-radius: var(--radius-md); padding: 14px; display: flex; gap: 12px;
+    }
+    .grid .ico {
+      width: 36px; height: 36px; border-radius: 50%;
+      background: var(--ice); display: flex; align-items: center; justify-content: center;
+      flex: 0 0 36px;
+    }
+    .grid .body .title { font-weight: 500; font-size: 14px; margin-bottom: 2px; }
+    .grid .body .desc { font-size: 12px; color: var(--text-secondary); line-height: 1.5; }
+    .grid .save {
+      margin-top: 6px; font-size: 11px; color: var(--success-text); font-weight: 500;
+    }
+    .cta {
+      display: inline-block; margin-top: 18px;
+      background: var(--info-bg); color: var(--info-text);
+      border: 1px solid var(--info-border); padding: 9px 16px;
+      border-radius: 6px; text-decoration: none; font-weight: 500; font-size: 14px;
+    }
+    .cta + .cta {
+      margin-left: 8px; background: transparent; color: var(--text);
+      border-color: var(--surface-3); font-weight: 400;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Crackalyzer</h1>
+    <span class="tagline">pre-attack password planner — Hashtopolis sidecar</span>
+    <span class="meter">
+      this week: <span class="pill">+2.4 h ice saved</span>
+      <span class="pill">87 bears warm</span>
+    </span>
+  </header>
+  <nav>
+    <a class="active">Home</a><a>Setup</a><a>Composer</a><a>Coverage</a>
+    <a>Compare</a><a>Heatmap</a><a>Overlap</a><a>Cluster</a><a>Verdict</a><a>Architecture</a>
+  </nav>
+  <main>
+    <div class="panel">
+      <div class="hero">
+        <div class="hero-text">
+          <h1>Crack smart. Save bears.</h1>
+          <p class="lead">
+            Every brute-forced hash costs ~110 W of GPU power. Every smart plan saves it.
+            Crackalyzer turns your shortcut from raw GPU-hours into ranked, deduplicated
+            attack chains — keeping the planet (and your electricity bill) cooler.
+          </p>
+          <div class="glob">
+            <span class="stat"><strong>2.4 h</strong> melt avoided this week</span>
+            <span class="stat"><strong>14.7 kWh</strong> GPU not burned</span>
+            <span class="stat"><strong>8.1 kg</strong> CO₂ skipped</span>
+          </div>
+          <div style="margin-top: 14px">
+            <a class="cta" href="#">Start with Setup →</a>
+            <a class="cta" href="#">See the architecture</a>
+          </div>
+        </div>
+        <div class="scoreboard">
+          <div class="label">🐻‍❄️ polar bear scoreboard</div>
+          <div class="big">87 / 100</div>
+          <div class="small">bears kept on solid ice this quarter</div>
+          <div class="bear-tray">
+            <!-- 8 bears, last one is "dim" to suggest next-up -->
+            <svg class="bear" viewBox="0 0 100 90"><ellipse cx="50" cy="62" rx="38" ry="22" fill="#fafdff" stroke="#7a8a96" stroke-width="0.8"/><circle cx="50" cy="36" r="22" fill="#fafdff" stroke="#7a8a96" stroke-width="0.8"/><circle cx="33" cy="22" r="7" fill="#fafdff" stroke="#7a8a96" stroke-width="0.8"/><circle cx="67" cy="22" r="7" fill="#fafdff" stroke="#7a8a96" stroke-width="0.8"/><circle cx="33" cy="22" r="3.6" fill="#e6c4b0"/><circle cx="67" cy="22" r="3.6" fill="#e6c4b0"/><ellipse cx="50" cy="44" rx="11" ry="7" fill="#ffffff" stroke="#9caab6" stroke-width="0.6"/><ellipse cx="50" cy="40" rx="3.4" ry="2.4" fill="#1b1b18"/><circle cx="41" cy="33" r="2.3" fill="#1b1b18"/><circle cx="59" cy="33" r="2.3" fill="#1b1b18"/><path d="M44 46 Q50 51 56 46" stroke="#1b1b18" stroke-width="1.4" fill="none" stroke-linecap="round"/></svg>
+            <svg class="bear" viewBox="0 0 100 90"><ellipse cx="50" cy="62" rx="38" ry="22" fill="#fafdff" stroke="#7a8a96" stroke-width="0.8"/><circle cx="50" cy="36" r="22" fill="#fafdff" stroke="#7a8a96" stroke-width="0.8"/><circle cx="33" cy="22" r="7" fill="#fafdff" stroke="#7a8a96" stroke-width="0.8"/><circle cx="67" cy="22" r="7" fill="#fafdff" stroke="#7a8a96" stroke-width="0.8"/><circle cx="33" cy="22" r="3.6" fill="#e6c4b0"/><circle cx="67" cy="22" r="3.6" fill="#e6c4b0"/><ellipse cx="50" cy="44" rx="11" ry="7" fill="#ffffff" stroke="#9caab6" stroke-width="0.6"/><ellipse cx="50" cy="40" rx="3.4" ry="2.4" fill="#1b1b18"/><circle cx="41" cy="33" r="2.3" fill="#1b1b18"/><circle cx="59" cy="33" r="2.3" fill="#1b1b18"/><path d="M44 46 Q50 51 56 46" stroke="#1b1b18" stroke-width="1.4" fill="none" stroke-linecap="round"/></svg>
+            <svg class="bear" viewBox="0 0 100 90"><ellipse cx="50" cy="62" rx="38" ry="22" fill="#fafdff" stroke="#7a8a96" stroke-width="0.8"/><circle cx="50" cy="36" r="22" fill="#fafdff" stroke="#7a8a96" stroke-width="0.8"/><circle cx="33" cy="22" r="7" fill="#fafdff" stroke="#7a8a96" stroke-width="0.8"/><circle cx="67" cy="22" r="7" fill="#fafdff" stroke="#7a8a96" stroke-width="0.8"/><circle cx="33" cy="22" r="3.6" fill="#e6c4b0"/><circle cx="67" cy="22" r="3.6" fill="#e6c4b0"/><ellipse cx="50" cy="44" rx="11" ry="7" fill="#ffffff" stroke="#9caab6" stroke-width="0.6"/><ellipse cx="50" cy="40" rx="3.4" ry="2.4" fill="#1b1b18"/><circle cx="41" cy="33" r="2.3" fill="#1b1b18"/><circle cx="59" cy="33" r="2.3" fill="#1b1b18"/><path d="M44 46 Q50 51 56 46" stroke="#1b1b18" stroke-width="1.4" fill="none" stroke-linecap="round"/></svg>
+            <svg class="bear" viewBox="0 0 100 90"><ellipse cx="50" cy="62" rx="38" ry="22" fill="#fafdff" stroke="#7a8a96" stroke-width="0.8"/><circle cx="50" cy="36" r="22" fill="#fafdff" stroke="#7a8a96" stroke-width="0.8"/><circle cx="33" cy="22" r="7" fill="#fafdff" stroke="#7a8a96" stroke-width="0.8"/><circle cx="67" cy="22" r="7" fill="#fafdff" stroke="#7a8a96" stroke-width="0.8"/><circle cx="33" cy="22" r="3.6" fill="#e6c4b0"/><circle cx="67" cy="22" r="3.6" fill="#e6c4b0"/><ellipse cx="50" cy="44" rx="11" ry="7" fill="#ffffff" stroke="#9caab6" stroke-width="0.6"/><ellipse cx="50" cy="40" rx="3.4" ry="2.4" fill="#1b1b18"/><circle cx="41" cy="33" r="2.3" fill="#1b1b18"/><circle cx="59" cy="33" r="2.3" fill="#1b1b18"/><path d="M44 46 Q50 51 56 46" stroke="#1b1b18" stroke-width="1.4" fill="none" stroke-linecap="round"/></svg>
+            <svg class="bear" viewBox="0 0 100 90"><ellipse cx="50" cy="62" rx="38" ry="22" fill="#fafdff" stroke="#7a8a96" stroke-width="0.8"/><circle cx="50" cy="36" r="22" fill="#fafdff" stroke="#7a8a96" stroke-width="0.8"/><circle cx="33" cy="22" r="7" fill="#fafdff" stroke="#7a8a96" stroke-width="0.8"/><circle cx="67" cy="22" r="7" fill="#fafdff" stroke="#7a8a96" stroke-width="0.8"/><circle cx="33" cy="22" r="3.6" fill="#e6c4b0"/><circle cx="67" cy="22" r="3.6" fill="#e6c4b0"/><ellipse cx="50" cy="44" rx="11" ry="7" fill="#ffffff" stroke="#9caab6" stroke-width="0.6"/><ellipse cx="50" cy="40" rx="3.4" ry="2.4" fill="#1b1b18"/><circle cx="41" cy="33" r="2.3" fill="#1b1b18"/><circle cx="59" cy="33" r="2.3" fill="#1b1b18"/><path d="M44 46 Q50 51 56 46" stroke="#1b1b18" stroke-width="1.4" fill="none" stroke-linecap="round"/></svg>
+            <svg class="bear" viewBox="0 0 100 90"><ellipse cx="50" cy="62" rx="38" ry="22" fill="#fafdff" stroke="#7a8a96" stroke-width="0.8"/><circle cx="50" cy="36" r="22" fill="#fafdff" stroke="#7a8a96" stroke-width="0.8"/><circle cx="33" cy="22" r="7" fill="#fafdff" stroke="#7a8a96" stroke-width="0.8"/><circle cx="67" cy="22" r="7" fill="#fafdff" stroke="#7a8a96" stroke-width="0.8"/><circle cx="33" cy="22" r="3.6" fill="#e6c4b0"/><circle cx="67" cy="22" r="3.6" fill="#e6c4b0"/><ellipse cx="50" cy="44" rx="11" ry="7" fill="#ffffff" stroke="#9caab6" stroke-width="0.6"/><ellipse cx="50" cy="40" rx="3.4" ry="2.4" fill="#1b1b18"/><circle cx="41" cy="33" r="2.3" fill="#1b1b18"/><circle cx="59" cy="33" r="2.3" fill="#1b1b18"/><path d="M44 46 Q50 51 56 46" stroke="#1b1b18" stroke-width="1.4" fill="none" stroke-linecap="round"/></svg>
+            <svg class="bear" viewBox="0 0 100 90"><ellipse cx="50" cy="62" rx="38" ry="22" fill="#fafdff" stroke="#7a8a96" stroke-width="0.8"/><circle cx="50" cy="36" r="22" fill="#fafdff" stroke="#7a8a96" stroke-width="0.8"/><circle cx="33" cy="22" r="7" fill="#fafdff" stroke="#7a8a96" stroke-width="0.8"/><circle cx="67" cy="22" r="7" fill="#fafdff" stroke="#7a8a96" stroke-width="0.8"/><circle cx="33" cy="22" r="3.6" fill="#e6c4b0"/><circle cx="67" cy="22" r="3.6" fill="#e6c4b0"/><ellipse cx="50" cy="44" rx="11" ry="7" fill="#ffffff" stroke="#9caab6" stroke-width="0.6"/><ellipse cx="50" cy="40" rx="3.4" ry="2.4" fill="#1b1b18"/><circle cx="41" cy="33" r="2.3" fill="#1b1b18"/><circle cx="59" cy="33" r="2.3" fill="#1b1b18"/><path d="M44 46 Q50 51 56 46" stroke="#1b1b18" stroke-width="1.4" fill="none" stroke-linecap="round"/></svg>
+            <svg class="bear" viewBox="0 0 100 90" style="opacity:0.3"><ellipse cx="50" cy="62" rx="38" ry="22" fill="#fafdff" stroke="#7a8a96" stroke-width="0.8"/><circle cx="50" cy="36" r="22" fill="#fafdff" stroke="#7a8a96" stroke-width="0.8"/><circle cx="33" cy="22" r="7" fill="#fafdff" stroke="#7a8a96" stroke-width="0.8"/><circle cx="67" cy="22" r="7" fill="#fafdff" stroke="#7a8a96" stroke-width="0.8"/></svg>
+          </div>
+          <div class="progress"><i></i></div>
+          <div class="floor"><span>0 saved</span><span>87 of 100 bears</span><span>100 🏆</span></div>
+        </div>
+      </div>
+
+      <div class="grid">
+        <div class="card">
+          <div class="ico">🧊</div>
+          <div class="body">
+            <div class="title">Coverage</div>
+            <div class="desc">cumulative mask curve · find the budget kink.</div>
+            <div class="save">+0.4 h ice saved last run</div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="ico">❄️</div>
+          <div class="body">
+            <div class="title">Heatmap</div>
+            <div class="desc">position × char frequency vs. English baseline.</div>
+            <div class="save">+0.0 h (passive)</div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="ico">🐻‍❄️</div>
+          <div class="body">
+            <div class="title">Verdict</div>
+            <div class="desc">your plan vs. brute force; grade & bears saved.</div>
+            <div class="save">+1.8 h ice saved last run</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+</body>
+</html>

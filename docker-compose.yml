@@ -1,0 +1,35 @@
+# Standalone Narwal container.
+#
+# `docker compose up` brings up just the Narwal web UI + backend on
+# port 8080. The Hashtopolis bridge is preview-only (Narwal generates
+# the supertask JSON; you POST it manually for now) so no Hashtopolis
+# container is needed for local development.
+#
+# To compose Narwal *with* a Hashtopolis dev container, override on the
+# CLI:
+#   docker compose \
+#     -f /path/to/hashtopolis/docker-compose.dev.yml \
+#     -f ./docker-compose.yml \
+#     up
+# and set HASHTOPOLIS_API_KEY in your shell so the bridge can talk back.
+
+services:
+  narwal:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: narwal:dev
+    container_name: narwal
+    ports:
+      - "8080:8080"
+    environment:
+      # Optional — only consulted when you click "Send to Hashtopolis"
+      # in the Verdict scene. Without these the bridge returns the JSON
+      # payload for manual posting.
+      HASHTOPOLIS_URL: ${HASHTOPOLIS_URL:-}
+      HASHTOPOLIS_API_KEY: ${HASHTOPOLIS_API_KEY:-}
+    volumes:
+      - ./data:/app/data
+      - ./backend:/app/backend
+      - ./web:/app/web
+    restart: unless-stopped

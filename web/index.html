@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Narwal — password attack planner</title>
+    <link rel="icon" type="image/png" sizes="16x16"  href="/assets/favicon-16.png"/>
+    <link rel="icon" type="image/png" sizes="32x32"  href="/assets/favicon-32.png"/>
+    <link rel="icon" type="image/png" sizes="48x48"  href="/assets/favicon-48.png"/>
+    <link rel="icon" type="image/png" sizes="64x64"  href="/assets/favicon-64.png"/>
+    <link rel="icon" type="image/png" sizes="128x128" href="/assets/favicon-128.png"/>
+    <link rel="apple-touch-icon" sizes="180x180" href="/assets/favicon-180.png"/>
+    <script>
+      // Apply persisted theme synchronously to avoid flash-of-light.
+      // Values: "auto" (no attr, defer to prefers-color-scheme) | "light" | "dark".
+      (function () {
+        try {
+          var t = localStorage.getItem("nrw-theme");
+          if (t === "light" || t === "dark") {
+            document.documentElement.setAttribute("data-theme", t);
+          }
+        } catch (_) {}
+      })();
+    </script>
+    <style>
+      :root, :root[data-theme="light"] {
+        --bg: #fafaf7;
+        --surface: #ffffff;
+        --surface-2: #f4f3ee;
+        --surface-3: #ebe9e1;
+        --border: rgba(0,0,0,0.12);
+        --border-2: rgba(0,0,0,0.2);
+        --text: #2C2C2A;
+        --text-secondary: #5F5E5A;
+        --text-tertiary: #888780;
+        --info-bg: #E6F1FB; --info-text: #0C447C; --info-border: #185FA5;
+        --success-bg: #EAF3DE; --success-text: #27500A; --success-border: #0F6E56;
+        --warning-bg: #FAEEDA; --warning-text: #633806; --warning-border: #BA7517;
+        --danger-bg: #FCEBEB; --danger-text: #791F1F; --danger-border: #A32D2D;
+        --mask-bg: #EEEDFE; --mask-text: #26215C; --mask-border: #534AB7;
+        --radius-md: 8px;
+        --radius-lg: 12px;
+        --shadow-sm: 0 1px 2px rgba(0,0,0,0.04);
+      }
+      /* Auto: follow OS preference when no explicit data-theme is set. */
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) {
+          --bg: #1a1a18;
+          --surface: #25241f;
+          --surface-2: #2f2e29;
+          --surface-3: #383631;
+          --border: rgba(255,255,255,0.12);
+          --border-2: rgba(255,255,255,0.2);
+          --text: #e8e6dd;
+          --text-secondary: #b4b2a9;
+          --text-tertiary: #888780;
+          --info-bg: #042C53; --info-text: #B5D4F4; --info-border: #185FA5;
+          --success-bg: #173404; --success-text: #C0DD97; --success-border: #0F6E56;
+          --warning-bg: #412402; --warning-text: #FAC775; --warning-border: #BA7517;
+          --danger-bg: #501313; --danger-text: #F7C1C1; --danger-border: #A32D2D;
+          --mask-bg: #26215C; --mask-text: #C8C3F4; --mask-border: #534AB7;
+        }
+      }
+      /* Explicit dark: wins over OS-pref-light. */
+      :root[data-theme="dark"] {
+        --bg: #1a1a18;
+        --surface: #25241f;
+        --surface-2: #2f2e29;
+        --surface-3: #383631;
+        --border: rgba(255,255,255,0.12);
+        --border-2: rgba(255,255,255,0.2);
+        --text: #e8e6dd;
+        --text-secondary: #b4b2a9;
+        --text-tertiary: #888780;
+        --info-bg: #042C53; --info-text: #B5D4F4; --info-border: #185FA5;
+        --success-bg: #173404; --success-text: #C0DD97; --success-border: #0F6E56;
+        --warning-bg: #412402; --warning-text: #FAC775; --warning-border: #BA7517;
+        --danger-bg: #501313; --danger-text: #F7C1C1; --danger-border: #A32D2D;
+        --mask-bg: #26215C; --mask-text: #C8C3F4; --mask-border: #534AB7;
+      }
+      * { box-sizing: border-box; }
+      html, body { height: 100%; margin: 0; }
+      body {
+        font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        background: var(--bg);
+        color: var(--text);
+      }
+      /* Nav doubles as the brand bar: links on the left, brand cluster
+         (theme toggle / sticker stack / narwal mascot) on the right. */
+      nav {
+        display: flex; align-items: center; gap: 4px;
+        padding: 6px 24px; min-height: 56px;
+        border-bottom: 0.5px solid var(--border);
+        background: var(--surface);
+      }
+      nav a {
+        color: var(--text-secondary);
+        text-decoration: none;
+        padding: 6px 14px;
+        border-radius: var(--radius-md);
+        font-size: 13px;
+        white-space: nowrap;
+        transition: all 0.15s;
+      }
+      nav a:hover { background: var(--surface-2); color: var(--text); }
+      nav a.active { background: var(--surface-3); color: var(--text); font-weight: 500; }
+      /* Per-link sticker badge — appears on every nav link whose scene
+         has at least one earned Polar-Unicorn. The link itself becomes
+         the "trophy case" so finishing each step is locally visible. */
+      nav a.has-sticker { position: relative; padding-right: 30px; }
+      nav a .nav-link-sticker {
+        position: absolute;
+        right: 4px; top: 50%;
+        width: 20px; height: 20px;
+        transform: translateY(-50%);
+        pointer-events: none;
+        filter: drop-shadow(0 0 1px var(--surface))
+                drop-shadow(0 0 3px rgba(255,217,106,0.45));
+      }
+      nav #nav-right {
+        margin-left: auto;
+        display: flex; align-items: center; gap: 14px;
+      }
+      nav #theme-toggle {
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 32px; height: 32px; padding: 0;
+        border-radius: 50%;
+        background: transparent;
+        border: 0.5px solid var(--border-2);
+        color: var(--text-secondary);
+        cursor: pointer;
+        transition: background 0.12s ease, color 0.12s ease;
+      }
+      nav #theme-toggle:hover { background: var(--surface-2); color: var(--text); }
+      /* Brand mascot sits at the top-left of the nav, always visible.
+         On the home scene it desaturates + pauses to signal "you're here". */
+      nav > #brand-mascot {
+        --nrw-mascot-size: 44px;
+        margin-right: 6px;
+        flex: 0 0 auto;
+      }
+      nav > #brand-mascot.home-dim {
+        filter: grayscale(1) brightness(1.05) opacity(0.55);
+        animation-play-state: paused;
+        cursor: default;
+        pointer-events: none;
+      }
+      main { padding: 24px; max-width: 1200px; margin: 0 auto; }
+      .panel {
+        background: var(--surface);
+        border: 0.5px solid var(--border);
+        border-radius: var(--radius-lg);
+        padding: 20px;
+        margin-bottom: 16px;
+        box-shadow: var(--shadow-sm);
+      }
+      .panel h2 { margin: 0 0 4px; font-size: 17px; font-weight: 500; letter-spacing: -0.2px; }
+      .panel .sub { color: var(--text-secondary); font-size: 13px; margin-bottom: 14px; }
+      button, select, input[type=text], input[type=number] {
+        font: inherit; font-size: 13px;
+        padding: 6px 12px;
+        border-radius: var(--radius-md);
+        border: 0.5px solid var(--border-2);
+        background: var(--surface);
+        color: var(--text);
+        cursor: pointer;
+        transition: background 0.15s, transform 0.1s;
+      }
+      input[type=text], input[type=number] { cursor: text; background: var(--surface-2); }
+      button:hover, select:hover { background: var(--surface-2); }
+      button:active { transform: scale(0.98); }
+      button.primary {
+        background: var(--warning-bg); color: var(--warning-text);
+        border-color: var(--warning-border); font-weight: 500;
+      }
+      button.primary:hover { filter: brightness(0.98); background: var(--warning-bg); }
+      .pill {
+        display: inline-block; padding: 2px 10px; border-radius: 12px;
+        font-size: 11px; font-weight: 500;
+      }
+      .pill-info { background: var(--info-bg); color: var(--info-text); }
+      .pill-success { background: var(--success-bg); color: var(--success-text); }
+      .pill-warning { background: var(--warning-bg); color: var(--warning-text); }
+      .pill-danger { background: var(--danger-bg); color: var(--danger-text); }
+      .pill-mask { background: var(--mask-bg); color: var(--mask-text); }
+      .stub-badge {
+        display: inline-block; background: var(--warning-bg); color: var(--warning-text);
+        padding: 1px 8px; border-radius: 4px; font-size: 10px;
+        text-transform: uppercase; letter-spacing: 0.5px;
+        margin-left: 8px; vertical-align: middle;
+      }
+      .chart-wrap { position: relative; height: 460px; }
+      table.kv { border-collapse: collapse; font-size: 12px; color: var(--text-secondary); }
+      table.kv td { padding: 2px 12px 2px 0; }
+      table.kv td:first-child { color: var(--text); }
+      .loading { color: var(--text-secondary); font-style: italic; }
+      .error { color: var(--danger-text); }
+      .overlay {
+        position: absolute; inset: 0;
+        display: flex; flex-direction: column;
+        align-items: center; justify-content: center;
+        gap: 12px;
+        background: color-mix(in srgb, var(--surface) 85%, transparent);
+        backdrop-filter: blur(2px);
+        border-radius: var(--radius-md);
+        z-index: 5;
+        pointer-events: none;
+      }
+      .overlay.hidden { display: none; }
+      .hidden { display: none !important; }
+      .overlay .label {
+        color: var(--text-secondary); font-size: 13px; letter-spacing: 0.2px;
+      }
+      .spinner {
+        width: 32px; height: 32px;
+        border: 3px solid var(--surface-3);
+        border-top-color: var(--info-border);
+        border-radius: 50%;
+        animation: spin 0.9s linear infinite;
+      }
+      @keyframes spin { to { transform: rotate(360deg); } }
+      .skeleton-bars {
+        display: flex; gap: 6px; align-items: flex-end;
+        height: 80px; opacity: 0.4;
+      }
+      .skeleton-bars i {
+        width: 10px; background: var(--info-border); display: block;
+        animation: pulse 1.2s ease-in-out infinite;
+      }
+      @keyframes pulse {
+        0%, 100% { opacity: 0.3; }
+        50%      { opacity: 0.9; }
+      }
+      .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+      .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+      @media (max-width: 900px) {
+        .grid-3, .grid-2 { grid-template-columns: 1fr; }
+      }
+      .card-list { display: flex; flex-direction: column; gap: 8px; }
+      .card {
+        background: var(--surface-2);
+        border: 0.5px solid var(--border);
+        border-radius: var(--radius-md);
+        padding: 10px 12px;
+      }
+      .card.info { background: var(--info-bg); border-color: var(--info-border); color: var(--info-text); }
+      .card.mask { background: var(--mask-bg); border-color: var(--mask-border); color: var(--mask-text); }
+      .card.success { background: var(--success-bg); border-color: var(--success-border); color: var(--success-text); }
+      .card.danger { background: var(--danger-bg); border-color: var(--danger-border); color: var(--danger-text); }
+      .card.warning { background: var(--warning-bg); border-color: var(--warning-border); color: var(--warning-text); }
+      .note {
+        font-size: 13px; color: var(--text-secondary);
+        margin-top: 12px; padding: 10px 12px;
+        background: var(--surface-2); border-radius: var(--radius-md);
+      }
+      code { font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 12px; }
+    </style>
+  </head>
+  <body>
+    <nav id="nav">
+      <div id="brand-mascot"></div>
+      <div id="nav-right">
+        <button id="theme-toggle"
+                type="button"
+                aria-label="Cycle theme: auto / light / dark"
+                title="Theme — click to cycle"></button>
+      </div>
+    </nav>
+    <main id="view"></main>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

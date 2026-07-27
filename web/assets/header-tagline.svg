@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Narwal brand header — rainbow-gradient headline used in the README
+  and home hero. Same colour stops as web/scenes/home.js (mascot-hair
+  palette). Width is intrinsic; consumers scale via the <img width="…">
+  attribute.
+-->
+<svg xmlns="http://www.w3.org/2000/svg"
+     viewBox="0 0 980 72" width="980" height="72"
+     role="img"
+     aria-label="Narwal: Plan the attack. Save polar bears.">
+  <defs>
+    <linearGradient id="rainbow" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%"   stop-color="#ff77c6"/>
+      <stop offset="16%"  stop-color="#ff6b6b"/>
+      <stop offset="32%"  stop-color="#ffb077"/>
+      <stop offset="48%"  stop-color="#ffd96a"/>
+      <stop offset="64%"  stop-color="#87e57a"/>
+      <stop offset="80%"  stop-color="#4dc6e8"/>
+      <stop offset="100%" stop-color="#b76ce0"/>
+    </linearGradient>
+  </defs>
+  <!-- Heavier stroke + slightly bolder weight so the gradient text reads
+       cleanly when GitHub serves the SVG over both light and dark page
+       backgrounds. -->
+  <text x="490" y="52"
+        text-anchor="middle"
+        font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
+        font-weight="800"
+        font-size="40"
+        letter-spacing="-0.6"
+        fill="url(#rainbow)"
+        stroke="url(#rainbow)"
+        stroke-width="0.4">Narwal: Plan the attack. Save polar bears.</text>
+</svg>

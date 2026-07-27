@@ -1,0 +1,254 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg"
+     viewBox="0 0 280 280"
+     preserveAspectRatio="xMidYMid meet"
+     role="img"
+     aria-label="Narwal — animated mascot">
+  <title>Narwal — animated mascot</title>
+
+  <defs>
+    <!-- Soft body gradient for the chubby blue belly+back. -->
+    <linearGradient id="bodyGrad" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0"  stop-color="#7ccaee"/>
+      <stop offset="1"  stop-color="#4a9fcc"/>
+    </linearGradient>
+    <radialGradient id="bellyGrad" cx="50%" cy="40%" r="60%">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#e7eef4"/>
+    </radialGradient>
+    <!-- Horn gradient: white with a hint of silver in the grooves. -->
+    <linearGradient id="hornGrad" x1="0" x2="1" y1="0" y2="0">
+      <stop offset="0"   stop-color="#ffffff"/>
+      <stop offset="0.6" stop-color="#f5f7fb"/>
+      <stop offset="1"   stop-color="#dde3eb"/>
+    </linearGradient>
+    <!-- Soft glow for the stars. -->
+    <filter id="starGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="1.4" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <style><![CDATA[
+      /* ── HAIR sway ───────────────────────────────────────────────── */
+      #hair {
+        transform-origin: 135px 80px;
+        animation: hair-sway 3.2s ease-in-out infinite;
+      }
+      @keyframes hair-sway {
+        0%, 100% { transform: rotate(-4deg); }
+        50%      { transform: rotate(4deg); }
+      }
+
+      /* ── STARS — staggered twinkle ───────────────────────────────── */
+      .star {
+        transform-origin: center;
+        transform-box: fill-box;
+      }
+      .s1 { animation: twinkle 1.8s ease-in-out  0.0s infinite; }
+      .s2 { animation: twinkle 2.2s ease-in-out -0.4s infinite; }
+      .s3 { animation: twinkle 1.5s ease-in-out -0.7s infinite; }
+      .s4 { animation: twinkle 2.4s ease-in-out -1.2s infinite; }
+      .s5 { animation: twinkle 1.9s ease-in-out -1.5s infinite; }
+      .s6 { animation: twinkle 2.1s ease-in-out -0.9s infinite; }
+      .s7 { animation: twinkle 1.7s ease-in-out -0.2s infinite; }
+      @keyframes twinkle {
+        0%, 100% { opacity: 0.25; transform: scale(0.4) rotate(0deg); }
+        50%      { opacity: 1;    transform: scale(1.3)  rotate(45deg); }
+      }
+
+      /* ── EYES — JS toggles `.blinking` on #eyes ──────────────────── */
+      .eye {
+        transform-origin: center;
+        transform-box: fill-box;
+        transition: transform 60ms ease-out;
+      }
+      #eyes.blinking .eye { transform: scaleY(0.08); }
+
+      /* ── TAIL wag ────────────────────────────────────────────────── */
+      #tail {
+        transform-origin: 198px 160px;
+        animation: tail-wag 1.8s ease-in-out infinite;
+      }
+      @keyframes tail-wag {
+        0%, 100% { transform: rotate(-10deg); }
+        50%      { transform: rotate(10deg); }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        #hair, #tail, .star { animation: none; }
+        .eye { transition: none; }
+      }
+    ]]></style>
+  </defs>
+
+  <!-- ──────────── TAIL (drawn first → partly behind body) ─────────── -->
+  <g id="tail">
+    <path d="M 192 158
+             C 220 130 250 110 264 108
+             C 258 130 250 148 242 152
+             C 262 168 258 188 240 192
+             C 218 184 200 174 192 168 Z"
+          fill="url(#bodyGrad)" stroke="#1b1b18" stroke-width="3" stroke-linejoin="round"/>
+    <!-- Fluke notch separating upper and lower lobes -->
+    <path d="M 240 150 Q 244 156 240 162" stroke="#1b1b18" stroke-width="2" fill="none"/>
+    <!-- subtle striations on each lobe -->
+    <path d="M 230 122 Q 246 118 256 116" stroke="#2e7ba1" stroke-width="1.4" fill="none"/>
+    <path d="M 232 178 Q 246 182 256 184" stroke="#2e7ba1" stroke-width="1.4" fill="none"/>
+  </g>
+
+  <!-- ──────────── BODY ────────────────────────────────────────────── -->
+  <g id="body">
+    <!-- chubby pear-shape main body -->
+    <path d="M 140 70
+             C 192 72 220 100 215 158
+             C 220 208 188 235 138 235
+             C 88 235 56 208 56 158
+             C 50 100 88 68 140 70 Z"
+          fill="url(#bodyGrad)" stroke="#1b1b18" stroke-width="3.5" stroke-linejoin="round"/>
+    <!-- soft top highlight -->
+    <path d="M 90 90 Q 130 78 175 88"
+          stroke="rgba(255,255,255,0.45)" stroke-width="6"
+          fill="none" stroke-linecap="round"/>
+    <!-- white belly -->
+    <path d="M 66 168
+             Q 140 145 212 168
+             Q 210 218 138 226
+             Q 64 220 66 168 Z"
+          fill="url(#bellyGrad)" stroke="#1b1b18" stroke-width="2.2"/>
+    <!-- left flipper -->
+    <path d="M 56 174
+             C 30 184 32 208 36 215
+             C 56 212 70 196 80 184 Z"
+          fill="url(#bodyGrad)" stroke="#1b1b18" stroke-width="3" stroke-linejoin="round"/>
+  </g>
+
+  <!-- ──────────── HAIR (rainbow strands sweeping back) ────────────── -->
+  <!-- Each strand is a stroked curve. Drawn twice: a black "outline"
+       pass (thicker), then a coloured pass on top. With round line-caps
+       this reads as a stranded mane, not flat triangles. -->
+  <g id="hair" fill="none" stroke-linecap="round">
+    <!-- outline pass -->
+    <path d="M  98 92 Q  88 60 100 36" stroke="#1b1b18" stroke-width="13"/>
+    <path d="M 112 90 Q 108 52 122 22" stroke="#1b1b18" stroke-width="13"/>
+    <path d="M 124 88 Q 130 42 142  8" stroke="#1b1b18" stroke-width="13"/>
+    <path d="M 156 88 Q 156 44 168 12" stroke="#1b1b18" stroke-width="13"/>
+    <path d="M 170 90 Q 178 56 196 32" stroke="#1b1b18" stroke-width="13"/>
+    <path d="M 184 92 Q 200 72 218 56" stroke="#1b1b18" stroke-width="13"/>
+    <!-- colour pass -->
+    <path d="M  98 92 Q  88 60 100 36" stroke="#ff6464" stroke-width="9"/>
+    <path d="M 112 90 Q 108 52 122 22" stroke="#ffa64a" stroke-width="9"/>
+    <path d="M 124 88 Q 130 42 142  8" stroke="#ffd84a" stroke-width="9"/>
+    <path d="M 156 88 Q 156 44 168 12" stroke="#5fce6a" stroke-width="9"/>
+    <path d="M 170 90 Q 178 56 196 32" stroke="#4ab9e8" stroke-width="9"/>
+    <path d="M 184 92 Q 200 72 218 56" stroke="#b76ce0" stroke-width="9"/>
+    <!-- tiny gloss highlight on each strand for that sticker-shine look -->
+    <path d="M 100 90 Q  92 64 103 40" stroke="rgba(255,255,255,0.45)" stroke-width="2"/>
+    <path d="M 114 88 Q 110 54 124 24" stroke="rgba(255,255,255,0.45)" stroke-width="2"/>
+    <path d="M 126 86 Q 132 44 144 10" stroke="rgba(255,255,255,0.45)" stroke-width="2"/>
+    <path d="M 158 86 Q 158 46 170 14" stroke="rgba(255,255,255,0.45)" stroke-width="2"/>
+    <path d="M 172 88 Q 180 58 198 34" stroke="rgba(255,255,255,0.45)" stroke-width="2"/>
+    <path d="M 186 90 Q 202 74 220 58" stroke="rgba(255,255,255,0.45)" stroke-width="2"/>
+  </g>
+
+  <!-- ──────────── HORN ────────────────────────────────────────────── -->
+  <g id="horn">
+    <path d="M 130 88
+             C 132 64 134 38 138 12
+             L 152 12
+             C 152 38 150 64 148 88 Z"
+          fill="url(#hornGrad)" stroke="#1b1b18" stroke-width="2.6" stroke-linejoin="round"/>
+    <!-- spiral twist marks -->
+    <path d="M 132 76 L 148 72" stroke="#1b1b18" stroke-width="1.5" fill="none"/>
+    <path d="M 134 64 L 150 60" stroke="#1b1b18" stroke-width="1.5" fill="none"/>
+    <path d="M 135 52 L 150 48" stroke="#1b1b18" stroke-width="1.5" fill="none"/>
+    <path d="M 137 40 L 150 36" stroke="#1b1b18" stroke-width="1.5" fill="none"/>
+    <path d="M 139 28 L 150 24" stroke="#1b1b18" stroke-width="1.5" fill="none"/>
+    <!-- horn sheen -->
+    <path d="M 138 14 L 138 84" stroke="#ffffff" stroke-width="2" opacity="0.6" fill="none"/>
+  </g>
+
+  <!-- ──────────── FACE — cheeks, mouth ────────────────────────────── -->
+  <g id="face">
+    <ellipse cx="70"  cy="180" rx="13" ry="7" fill="#ffa3a3" opacity="0.85"/>
+    <ellipse cx="200" cy="180" rx="13" ry="7" fill="#ffa3a3" opacity="0.85"/>
+    <!-- open happy mouth (outer dark) -->
+    <path d="M 108 178
+             Q 138 212 162 178
+             Q 156 196 138 200
+             Q 118 196 108 178 Z"
+          fill="#1b1b18"/>
+    <!-- tongue -->
+    <path d="M 120 191 Q 138 207 156 191 Q 138 200 120 191 Z"
+          fill="#ff7ba2"/>
+    <!-- inner mouth lip highlight -->
+    <path d="M 122 179 Q 138 192 154 179" stroke="#3a2222" stroke-width="1.2" fill="none" opacity="0.5"/>
+  </g>
+
+  <!-- ──────────── EYES (each on its own group for blink) ──────────── -->
+  <g id="eyes">
+    <g class="eye left">
+      <ellipse class="ball"   cx="98"  cy="148" rx="14" ry="17" fill="#1b1b18"/>
+      <ellipse class="shine"  cx="103" cy="140" rx="5"  ry="6"  fill="#ffffff"/>
+      <circle  class="shine2" cx="92"  cy="156" r="2.4"         fill="#ffffff"/>
+    </g>
+    <g class="eye right">
+      <ellipse class="ball"   cx="170" cy="148" rx="14" ry="17" fill="#1b1b18"/>
+      <ellipse class="shine"  cx="175" cy="140" rx="5"  ry="6"  fill="#ffffff"/>
+      <circle  class="shine2" cx="164" cy="156" r="2.4"         fill="#ffffff"/>
+    </g>
+  </g>
+
+  <!-- ──────────── STARS (around the horn) ─────────────────────────── -->
+  <g id="stars" filter="url(#starGlow)">
+    <!-- 4-point burst stars made of two crossed thin rhombi -->
+    <g class="star s1">
+      <path d="M  92 36 L  95 44 L 100 47 L  95 50 L  92 58 L  89 50 L  84 47 L  89 44 Z" fill="#ff77c6"/>
+    </g>
+    <g class="star s2">
+      <path d="M 178 36 L 181 44 L 186 47 L 181 50 L 178 58 L 175 50 L 170 47 L 175 44 Z" fill="#ffd84a"/>
+    </g>
+    <g class="star s3">
+      <path d="M 122 12 L 125 20 L 130 23 L 125 26 L 122 34 L 119 26 L 114 23 L 119 20 Z" fill="#5fce6a"/>
+    </g>
+    <g class="star s4">
+      <path d="M 200 70 L 203 78 L 208 81 L 203 84 L 200 92 L 197 84 L 192 81 L 197 78 Z" fill="#4ab9e8"/>
+    </g>
+    <g class="star s5">
+      <path d="M  70 70 L  73 78 L  78 81 L  73 84 L  70 92 L  67 84 L  62 81 L  67 78 Z" fill="#b76ce0"/>
+    </g>
+    <g class="star s6">
+      <path d="M 158  6 L 161 14 L 166 17 L 161 20 L 158 28 L 155 20 L 150 17 L 155 14 Z" fill="#ff6464"/>
+    </g>
+    <g class="star s7">
+      <path d="M 230 110 L 233 118 L 238 121 L 233 124 L 230 132 L 227 124 L 222 121 L 227 118 Z" fill="#ffa64a"/>
+    </g>
+  </g>
+
+  <script type="text/javascript"><![CDATA[
+    // Random-interval eye blinks. CSS-only blinks look robotic; a stochastic
+    // 2.5–6 s gap between blinks reads alive without being distracting.
+    // Occasional double-blink (~25%) for personality.
+    (function () {
+      var eyes = document.getElementById("eyes");
+      if (!eyes) return;
+      var mq = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)");
+      if (mq && mq.matches) return;
+
+      function doBlink() {
+        eyes.classList.add("blinking");
+        setTimeout(function () {
+          eyes.classList.remove("blinking");
+          if (Math.random() < 0.25) setTimeout(doBlink, 180);
+        }, 110);
+      }
+      function scheduleNext() {
+        var wait = 2500 + Math.random() * 3500;
+        setTimeout(function () { doBlink(); scheduleNext(); }, wait);
+      }
+      scheduleNext();
+    })();
+  ]]></script>
+</svg>

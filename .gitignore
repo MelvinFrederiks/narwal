@@ -1,0 +1,44 @@
+# Reference corpora — sourced via MAYA's downloader; do not ship in-repo
+data/raw/*
+!data/raw/.gitkeep
+data/clean/*
+!data/clean/.gitkeep
+data/sketches/*
+!data/sketches/.gitkeep
+data/cache/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Virtualenvs
+.venv/
+.venv-host/
+venv/
+.python-version-local
+
+# Claude Code session state (local only)
+.claude/
+
+# uv lock — we keep pyproject.toml authoritative; uv.lock optional
+uv.lock
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+
+# Local-only secrets / runtime
+.env
+.env.local
+*.log
+
+data/screenshots/
+# Playwright render artifacts inside data/mockups/ — temporary screenshots
+# from iteration loops; the real mockup HTMLs (no underscore) are tracked.
+data/mockups/_*.png
+third_party/

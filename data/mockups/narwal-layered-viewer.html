@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>narwal-logo — layered viewer</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body {
+      font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background:
+        radial-gradient(ellipse 60% 80% at 30% 20%, rgba(74,159,204,0.18), transparent 60%),
+        radial-gradient(ellipse 70% 70% at 80% 80%, rgba(135,229,122,0.10), transparent 60%),
+        linear-gradient(160deg, #0c1620 0%, #14202e 60%, #0a141d 100%);
+      color: #e8e6dd;
+      min-height: 100vh;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+    }
+    header {
+      padding: 16px 28px; border-bottom: 0.5px solid rgba(255,255,255,0.08);
+      display: flex; align-items: center; gap: 12px;
+    }
+    header h1 {
+      margin: 0; font-size: 14px; font-weight: 500;
+      color: #b4b2a9; letter-spacing: 0.3px;
+    }
+    header .meta {
+      margin-left: auto; font-size: 12px; color: #888780;
+      font-family: "SF Mono", Menlo, monospace;
+    }
+
+    main {
+      display: grid; grid-template-columns: 1fr 1fr 1fr;
+      gap: 24px; padding: 32px;
+      align-content: center; max-width: 1320px; margin: 0 auto;
+    }
+    .stage { display: flex; flex-direction: column; align-items: center; gap: 16px; }
+    .stage .circle {
+      width: 360px; height: 360px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      position: relative;
+      box-shadow:
+        0 24px 60px rgba(0,0,0,0.45),
+        inset 0 -20px 40px rgba(0,0,0,0.20),
+        inset 0 20px 30px rgba(255,255,255,0.04);
+    }
+    .stage .circle.steel {
+      background: radial-gradient(circle at 35% 30%, #2a3a4a, #0f1a24 70%);
+      border: 1px solid rgba(135,198,240,0.18);
+    }
+    .stage .circle.violet {
+      background: radial-gradient(circle at 35% 30%, #3a2a4a, #1d1024 70%);
+      border: 1px solid rgba(183,108,224,0.20);
+    }
+    .stage .circle.deep {
+      background: #000000;
+      border: 1px solid rgba(255,255,255,0.10);
+    }
+    .stage .caption {
+      color: #b4b2a9; font-size: 12px;
+      font-family: "SF Mono", Menlo, monospace;
+    }
+
+    /* ── The layered narwal ──────────────────────────────────────────── */
+    .narwal {
+      width: 86%; height: 86%; position: relative;
+    }
+    .narwal img {
+      position: absolute; inset: 0;
+      width: 100%; height: 100%;
+      pointer-events: none;
+      will-change: transform, opacity;
+    }
+    /* z-order: tail → body → wings → mouth → eyes → hair → horn → stars */
+    .l-tail   { z-index: 1; }
+    .l-body   { z-index: 2; }
+    .l-wings  { z-index: 3; }
+    .l-mouth  { z-index: 4; }
+    .l-eye-l, .l-eye-r { z-index: 5; }
+    .l-hair   { z-index: 6; }
+    .l-horn   { z-index: 7; }
+    .l-stars  { z-index: 8; }
+
+    /* Source coords in the original 1254×1254: convert to percent-of-element.
+       Hinges chosen near each part's natural pivot. */
+    .l-tail   { transform-origin: 75%  56%; animation: tail-wag   1.8s ease-in-out infinite; }
+    .l-wings  { transform-origin: 18%  74%; animation: wing-flap  2.2s ease-in-out infinite; }
+    .l-mouth  { transform-origin: 49%  67%; animation: mouth-pulse 3.4s ease-in-out infinite; }
+    .l-hair   { transform-origin: 50%  37%; animation: hair-sway  3.2s ease-in-out infinite; }
+    .l-horn   { transform-origin: 51%  38%; animation: horn-pulse 4.2s ease-in-out infinite; }
+    .l-stars  { animation: stars-twinkle 2.6s ease-in-out infinite; }
+
+    /* Eyes blink — JS toggles `.blinking` on .narwal */
+    .l-eye-l  { transform-origin: 36% 55%; transition: transform 70ms ease-out; }
+    .l-eye-r  { transform-origin: 62% 55%; transition: transform 70ms ease-out; }
+    .narwal.blinking .l-eye-l,
+    .narwal.blinking .l-eye-r { transform: scaleY(0.05); }
+
+    @keyframes tail-wag {
+      0%, 100% { transform: rotate(-10deg); }
+      50%      { transform: rotate(10deg); }
+    }
+    @keyframes hair-sway {
+      0%, 100% { transform: rotate(-4deg); }
+      50%      { transform: rotate(4deg); }
+    }
+    @keyframes wing-flap {
+      0%, 100% { transform: rotate(-3deg) translateY(0); }
+      50%      { transform: rotate(3deg)  translateY(-2px); }
+    }
+    @keyframes mouth-pulse {
+      0%, 100% { transform: scale(1.0); }
+      50%      { transform: scale(1.04); }
+    }
+    @keyframes horn-pulse {
+      0%, 100% { transform: scale(1.0);  filter: drop-shadow(0 0 0 transparent); }
+      50%      { transform: scale(1.02); filter: drop-shadow(0 0 6px rgba(255,255,255,0.45)); }
+    }
+    @keyframes stars-twinkle {
+      0%, 100% { opacity: 0.45; transform: scale(0.95); }
+      50%      { opacity: 1.0;  transform: scale(1.06); }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .l-tail, .l-hair, .l-wings, .l-mouth, .l-horn, .l-stars { animation: none; }
+      .l-eye-l, .l-eye-r { transition: none; }
+    }
+
+    .legend {
+      max-width: 760px; margin: 0 auto; padding: 18px 28px;
+      border-top: 0.5px solid rgba(255,255,255,0.08);
+      color: #888780; font-size: 12px;
+      display: flex; gap: 22px; flex-wrap: wrap; justify-content: center;
+    }
+    .legend strong { color: #e8e6dd; font-weight: 500; }
+    .legend code {
+      background: rgba(255,255,255,0.06); padding: 1px 6px; border-radius: 4px;
+      color: #b4b2a9;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>narwal-logo — cut into 9 layers from the source PNG, animated separately</h1>
+    <span class="meta">/web/assets/narwal-parts/*.png · 1254×1254 each</span>
+  </header>
+
+  <main>
+    <!-- Each stage instantiates its own .narwal so each circle has its own blink loop. -->
+    <div class="stage">
+      <div class="circle steel">
+        <div class="narwal" data-narwal>
+          <img class="l-tail"  src="../../web/assets/narwal-parts/tail.png"  alt=""/>
+          <img class="l-body"  src="../../web/assets/narwal-parts/body.png"  alt=""/>
+          <img class="l-wings" src="../../web/assets/narwal-parts/wings.png" alt=""/>
+          <img class="l-mouth" src="../../web/assets/narwal-parts/mouth.png" alt=""/>
+          <img class="l-eye-l" src="../../web/assets/narwal-parts/eye_left.png"  alt=""/>
+          <img class="l-eye-r" src="../../web/assets/narwal-parts/eye_right.png" alt=""/>
+          <img class="l-hair"  src="../../web/assets/narwal-parts/hair.png"  alt=""/>
+          <img class="l-horn"  src="../../web/assets/narwal-parts/horn.png"  alt=""/>
+          <img class="l-stars" src="../../web/assets/narwal-parts/stars.png" alt=""/>
+        </div>
+      </div>
+      <div class="caption">steel</div>
+    </div>
+
+    <div class="stage">
+      <div class="circle deep">
+        <div class="narwal" data-narwal>
+          <img class="l-tail"  src="../../web/assets/narwal-parts/tail.png"  alt=""/>
+          <img class="l-body"  src="../../web/assets/narwal-parts/body.png"  alt=""/>
+          <img class="l-wings" src="../../web/assets/narwal-parts/wings.png" alt=""/>
+          <img class="l-mouth" src="../../web/assets/narwal-parts/mouth.png" alt=""/>
+          <img class="l-eye-l" src="../../web/assets/narwal-parts/eye_left.png"  alt=""/>
+          <img class="l-eye-r" src="../../web/assets/narwal-parts/eye_right.png" alt=""/>
+          <img class="l-hair"  src="../../web/assets/narwal-parts/hair.png"  alt=""/>
+          <img class="l-horn"  src="../../web/assets/narwal-parts/horn.png"  alt=""/>
+          <img class="l-stars" src="../../web/assets/narwal-parts/stars.png" alt=""/>
+        </div>
+      </div>
+      <div class="caption">deep</div>
+    </div>
+
+    <div class="stage">
+      <div class="circle violet">
+        <div class="narwal" data-narwal>
+          <img class="l-tail"  src="../../web/assets/narwal-parts/tail.png"  alt=""/>
+          <img class="l-body"  src="../../web/assets/narwal-parts/body.png"  alt=""/>
+          <img class="l-wings" src="../../web/assets/narwal-parts/wings.png" alt=""/>
+          <img class="l-mouth" src="../../web/assets/narwal-parts/mouth.png" alt=""/>
+          <img class="l-eye-l" src="../../web/assets/narwal-parts/eye_left.png"  alt=""/>
+          <img class="l-eye-r" src="../../web/assets/narwal-parts/eye_right.png" alt=""/>
+          <img class="l-hair"  src="../../web/assets/narwal-parts/hair.png"  alt=""/>
+          <img class="l-horn"  src="../../web/assets/narwal-parts/horn.png"  alt=""/>
+          <img class="l-stars" src="../../web/assets/narwal-parts/stars.png" alt=""/>
+        </div>
+      </div>
+      <div class="caption">violet</div>
+    </div>
+  </main>
+
+  <div class="legend">
+    <span><strong>9 layers</strong> · tail · body · wings · mouth · eye_l · eye_r · hair · horn · stars</span>
+    <span><strong>CSS</strong> · sway/wag/flap/pulse/twinkle</span>
+    <span><strong>JS</strong> · per-instance random eye-blink with double-blink chance</span>
+  </div>
+
+  <script>
+    // Each .narwal[data-narwal] gets its own independent random-blink loop so
+    // the three stages don't blink in lock-step.
+    var mq = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)");
+    var reduceMotion = mq && mq.matches;
+
+    document.querySelectorAll('[data-narwal]').forEach(function (narwal) {
+      if (reduceMotion) return;
+
+      function doBlink() {
+        narwal.classList.add('blinking');
+        setTimeout(function () {
+          narwal.classList.remove('blinking');
+          if (Math.random() < 0.25) setTimeout(doBlink, 180);
+        }, 110);
+      }
+      function scheduleNext() {
+        var wait = 2500 + Math.random() * 3500;
+        setTimeout(function () { doBlink(); scheduleNext(); }, wait);
+      }
+      // Stagger the initial start so all three don't blink at second 2.5.
+      setTimeout(scheduleNext, Math.random() * 2000);
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>Narwal — home (dark, mascot in nav)</title>
+  <link rel="stylesheet" href="_polar.css"/>
+  <style>
+    /* Override _polar.css light tokens with the Crackalyzer dark-mode set
+       (same values as web/index.html `:root[data-theme="dark"]`). */
+    :root {
+      --bg: #1a1a18;
+      --surface: #25241f;
+      --surface-2: #2f2e29;
+      --surface-3: #383631;
+      --border: rgba(255,255,255,0.12);
+      --border-2: rgba(255,255,255,0.2);
+      --text: #e8e6dd;
+      --text-secondary: #b4b2a9;
+      --text-tertiary: #888780;
+      --info-bg: #042C53; --info-text: #B5D4F4; --info-border: #185FA5;
+      --success-bg: #173404; --success-text: #C0DD97; --success-border: #0F6E56;
+      --warning-bg: #412402; --warning-text: #FAC775; --warning-border: #BA7517;
+      --danger-bg: #501313; --danger-text: #F7C1C1; --danger-border: #A32D2D;
+      --shadow-sm: 0 1px 2px rgba(0,0,0,0.4);
+      --shadow-md: 0 4px 16px rgba(0,0,0,0.55);
+    }
+    body {
+      background: linear-gradient(180deg, #1a1a18, #1f1f1c);
+    }
+
+    /* ── Top slogan bar ──────────────────────────────────────────────── */
+    header {
+      padding: 14px 24px 12px;
+      background: linear-gradient(180deg, #1d2730 0%, #25241f 100%);
+      border-bottom: 0.5px solid var(--border);
+    }
+    .slogan {
+      font-size: 22px;
+      font-weight: 600;
+      color: var(--text);
+      letter-spacing: -0.2px;
+      line-height: 1.25;
+    }
+
+    /* ── Nav with Narwal mascot riding shotgun on the right ──────────── */
+    nav {
+      display: flex; align-items: center; gap: 4px;
+      padding: 6px 24px; min-height: 88px;
+      border-bottom: 0.5px solid var(--border); background: var(--surface);
+    }
+    nav a {
+      color: var(--text-secondary); text-decoration: none;
+      padding: 6px 14px; border-radius: 8px; font-size: 13px;
+    }
+    nav a:hover { background: var(--surface-2); color: var(--text); }
+    nav a.active { background: var(--surface-3); color: var(--text); font-weight: 500; }
+
+    nav .nav-mascot {
+      margin-left: auto;
+      width: 76px; height: 76px;
+      background-image: url("../../logo-narwal.png");
+      background-size: contain; background-repeat: no-repeat; background-position: center;
+      filter: drop-shadow(0 4px 12px rgba(135, 198, 240, 0.25));
+      transform-origin: 35% 60%;
+      animation: swim 4.4s ease-in-out infinite;
+      cursor: pointer;
+      user-select: none;
+    }
+    nav .nav-mascot.still {
+      animation: none;
+      transform: translateY(0) rotate(0deg);
+    }
+    @keyframes swim {
+      0%, 100% { transform: translateY(0px) rotate(-3deg); }
+      30%      { transform: translateY(-4px) rotate(1deg); }
+      50%      { transform: translateY(-6px) rotate(4deg); }
+      70%      { transform: translateY(-3px) rotate(2deg); }
+    }
+
+    /* ── Hero / content ──────────────────────────────────────────────── */
+    .hero {
+      display: grid; grid-template-columns: 1fr 360px; gap: 26px;
+      align-items: stretch;
+    }
+    .hero-text .lead {
+      color: var(--text-secondary); font-size: 14px; line-height: 1.55; max-width: 560px;
+      margin-top: 10px;
+    }
+    .hero-text .lead strong { color: var(--text); }
+    .clarify-card {
+      background: var(--info-bg); border: 1px solid var(--info-border);
+      color: var(--info-text); padding: 12px 14px; border-radius: 8px;
+      margin-top: 14px; font-size: 13px; line-height: 1.5; max-width: 560px;
+    }
+    .clarify-card .unit-label {
+      font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
+      font-size: 11px; margin-bottom: 4px;
+    }
+
+    .cta-row { display: flex; gap: 10px; margin-top: 18px; }
+    .cta {
+      display: inline-block; padding: 10px 18px;
+      border-radius: 8px; text-decoration: none; font-weight: 500; font-size: 14px;
+      border: 1px solid var(--surface-3); color: var(--text); background: var(--surface);
+    }
+    .cta:hover { background: var(--surface-2); }
+    .cta.primary {
+      background: var(--info-bg); color: var(--info-text); border-color: var(--info-border);
+    }
+
+    /* ── Scoreboard ──────────────────────────────────────────────────── */
+    .scoreboard {
+      background: linear-gradient(180deg, #1b2a3a 0%, #15202c 100%);
+      border-radius: var(--radius-lg); border: 0.5px solid var(--border);
+      padding: 22px 22px 18px; box-shadow: var(--shadow-md);
+      display: flex; flex-direction: column; text-align: left;
+    }
+    .scoreboard .label {
+      font-size: 11px; letter-spacing: 1.2px; text-transform: uppercase;
+      color: var(--text-secondary); font-weight: 500;
+    }
+    .scoreboard .big {
+      font-size: 56px; font-weight: 700; line-height: 1.05; color: var(--text);
+      font-variant-numeric: tabular-nums; margin: 4px 0 2px;
+    }
+    .scoreboard .unit { font-size: 16px; color: var(--text-secondary); font-weight: 500; }
+    .scoreboard .sub {
+      color: var(--text-secondary); font-size: 12px; margin: 8px 0 14px;
+    }
+    .scoreboard .progress {
+      width: 100%; height: 10px;
+      background: rgba(255,255,255,0.08); border-radius: 6px; overflow: hidden;
+    }
+    .scoreboard .progress > i {
+      display: block; height: 100%;
+      background: linear-gradient(90deg, #ff77c6 0%, #ffb077 40%, #ffd96a 70%, #87e57a 100%);
+      width: 71%;
+    }
+    .scoreboard .floor {
+      margin-top: 8px;
+      display: flex; justify-content: space-between;
+      font-size: 11px; color: var(--text-secondary);
+    }
+    .scoreboard .recent {
+      margin-top: 16px; padding-top: 14px;
+      border-top: 1px dashed rgba(255,255,255,0.15);
+      display: flex; flex-direction: column; gap: 6px;
+      font-size: 12px;
+    }
+    .scoreboard .recent .row {
+      display: flex; justify-content: space-between;
+      color: var(--text-secondary);
+    }
+    .scoreboard .recent .row strong { color: var(--success-text); }
+
+    .panel {
+      background: var(--surface);
+      border: 0.5px solid var(--border);
+    }
+
+    .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 22px; }
+    .grid .card {
+      background: var(--surface-2); border: 0.5px solid var(--surface-3);
+      border-radius: var(--radius-md); padding: 14px 16px; display: flex; gap: 12px;
+    }
+    .grid .ico {
+      width: 36px; height: 36px; border-radius: 50%;
+      background: linear-gradient(180deg, #1b2a3a, #15202c);
+      display: flex; align-items: center; justify-content: center;
+      flex: 0 0 36px; font-size: 18px;
+    }
+    .grid .body .title { font-weight: 500; font-size: 14px; margin-bottom: 2px; color: var(--text); }
+    .grid .body .desc { font-size: 12px; color: var(--text-secondary); line-height: 1.5; }
+    .grid .save {
+      margin-top: 6px; font-size: 11px; color: var(--success-text); font-weight: 500;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="slogan">Narwal — crack smart. save polarbears.</div>
+  </header>
+  <nav>
+    <a class="active">Home</a><a>Setup</a><a>Composer</a><a>Coverage</a>
+    <a>Compare</a><a>Heatmap</a><a>Overlap</a><a>Cluster</a><a>Verdict</a><a>Architecture</a>
+    <div class="nav-mascot" id="brand-mascot" aria-label="Narwal — click to settle"></div>
+  </nav>
+  <main>
+    <div class="panel">
+      <div class="hero">
+        <div class="hero-text">
+          <div class="pill pill-info">plan-only · Hashtopolis cracks</div>
+          <p class="lead">
+            Narwal turns brute GPU-hours into ranked, deduplicated attack chains.
+            Every chain you skip saves real grid power — your 8× RTX 4090 cluster
+            eats <strong>3.6 kW</strong> when it's hashing.
+          </p>
+
+          <div class="clarify-card">
+            <div class="unit-label">how Narwal reports savings — one number, one unit</div>
+            We translate every plan into <strong>household-days</strong>:
+            the electricity an average Dutch home consumes in 24 hours (~10 kWh).
+            One full day on the cluster ≈ <strong>9 household-days</strong>.
+            A clever 2-hour plan can save <strong>~0.7 household-days</strong>.
+          </div>
+
+          <div class="cta-row">
+            <a class="cta primary" href="#">Start with Setup →</a>
+            <a class="cta" href="#">See the architecture</a>
+          </div>
+        </div>
+
+        <div class="scoreboard">
+          <div class="label">household-days saved · this quarter</div>
+          <div class="big">14.2<span class="unit"> hh-days</span></div>
+          <div class="sub">71 % of the way to your next 🏆 polar bear (every 20 hh-days).</div>
+          <div class="progress"><i></i></div>
+          <div class="floor"><span>0</span><span>71 %</span><span>20 hh-days</span></div>
+
+          <div class="recent">
+            <div class="row"><span>last 3 plans</span><span></span></div>
+            <div class="row"><span>rockyou-ntlm · 3 steps</span><strong>+1.8</strong></div>
+            <div class="row"><span>linkedin-ntlm · 2 steps</span><strong>+0.4</strong></div>
+            <div class="row"><span>mailru-md5 · 4 steps</span><strong>+0.2</strong></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid">
+        <div class="card">
+          <div class="ico">📊</div>
+          <div class="body">
+            <div class="title">Coverage</div>
+            <div class="desc">find the budget kink — where new masks cost more than they crack.</div>
+            <div class="save">last run: 0.4 household-days saved</div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="ico">🧩</div>
+          <div class="body">
+            <div class="title">Composer</div>
+            <div class="desc">build a ranked, deduplicated attack chain by clicking.</div>
+            <div class="save">last run: 0.2 household-days saved</div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="ico">⚖️</div>
+          <div class="body">
+            <div class="title">Verdict</div>
+            <div class="desc">grade your plan vs. brute force; household-days saved.</div>
+            <div class="save">last run: 1.8 household-days saved</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    (function () {
+      var mascot = document.getElementById("brand-mascot");
+      if (!mascot) return;
+      function apply() {
+        if (sessionStorage.getItem("narwal-still") === "1") {
+          mascot.classList.add("still");
+        } else {
+          mascot.classList.remove("still");
+        }
+      }
+      mascot.addEventListener("click", function () {
+        var was = sessionStorage.getItem("narwal-still") === "1";
+        sessionStorage.setItem("narwal-still", was ? "" : "1");
+        apply();
+      });
+      apply();
+    })();
+  </script>
+</body>
+</html>

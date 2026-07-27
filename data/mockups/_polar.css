@@ -1,0 +1,79 @@
+/* Shared mockup styles — borrows the Crackalyzer token set,
+   tinted slightly icier so the polar-bear vibe lands. */
+:root {
+  --bg: #eaf3f8;
+  --ice: #d6ecf6;
+  --ice-2: #b9defa;
+  --ice-3: #87c6f0;
+  --surface: #ffffff;
+  --surface-2: #f4faff;
+  --surface-3: #e3eef7;
+  --border: rgba(0,0,0,0.10);
+  --border-2: rgba(0,0,0,0.18);
+  --text: #1f2a33;
+  --text-secondary: #5b6975;
+  --text-tertiary: #8b97a3;
+  --info-bg: #E6F1FB; --info-text: #0C447C; --info-border: #185FA5;
+  --success-bg: #DCF0E0; --success-text: #1f5a2a; --success-border: #1f7a38;
+  --warning-bg: #FAEEDA; --warning-text: #633806; --warning-border: #BA7517;
+  --danger-bg:  #FCEBEB; --danger-text:  #791F1F; --danger-border:  #A32D2D;
+  --radius-md: 8px; --radius-lg: 12px;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
+  --shadow-md: 0 4px 16px rgba(38,75,110,0.12);
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: linear-gradient(180deg, var(--bg), #f6fafd);
+  color: var(--text);
+}
+header {
+  padding: 14px 24px; background: var(--surface);
+  border-bottom: 0.5px solid var(--border);
+  display: flex; align-items: center; gap: 16px;
+}
+header h1 { margin: 0; font-size: 18px; font-weight: 500; }
+header .tagline { color: var(--text-secondary); font-size: 13px; }
+header .meter {
+  margin-left: auto; display: flex; align-items: center; gap: 8px;
+  font-size: 12px; color: var(--text-secondary);
+}
+header .meter .pill {
+  background: var(--success-bg); color: var(--success-text);
+  padding: 2px 10px; border-radius: 12px; font-weight: 500;
+}
+nav {
+  display: flex; gap: 4px; padding: 8px 24px;
+  border-bottom: 0.5px solid var(--border); background: var(--surface);
+}
+nav a {
+  color: var(--text-secondary); text-decoration: none;
+  padding: 6px 14px; border-radius: 8px; font-size: 13px;
+}
+nav a.active { background: var(--surface-3); color: var(--text); font-weight: 500; }
+main { padding: 22px; max-width: 1240px; margin: 0 auto; }
+.panel {
+  background: var(--surface);
+  border: 0.5px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 20px; margin-bottom: 16px;
+  box-shadow: var(--shadow-sm);
+}
+.panel h2 { margin: 0 0 4px; font-size: 17px; font-weight: 500; }
+.panel .sub { color: var(--text-secondary); font-size: 13px; margin-bottom: 14px; }
+.pill {
+  display: inline-block; padding: 2px 10px; border-radius: 12px;
+  font-size: 11px; font-weight: 500;
+}
+.pill-info { background: var(--info-bg); color: var(--info-text); }
+.pill-success { background: var(--success-bg); color: var(--success-text); }
+.pill-warning { background: var(--warning-bg); color: var(--warning-text); }
+.kv td { padding: 2px 12px 2px 0; font-size: 12px; color: var(--text-secondary); }
+.kv td:first-child { color: var(--text); font-weight: 500; }
+.kv tr td:nth-child(2) { font-variant-numeric: tabular-nums; }
+
+/* Polar bear floats — used as decorative chips. */
+.bear-row { display: flex; gap: 4px; align-items: center; }
+.bear-row .bear { width: 22px; height: 22px; }
+.bear-row .bear.dim { opacity: 0.25; }

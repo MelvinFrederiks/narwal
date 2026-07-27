@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>Narwal — architecture (v1 · low-key clarify note)</title>
+  <style>
+    :root, :root[data-theme="light"] {
+      --bg: #fafaf7;
+      --surface: #ffffff;
+      --surface-2: #f4f3ee;
+      --surface-3: #ebe9e1;
+      --border: rgba(0,0,0,0.12);
+      --text: #2C2C2A;
+      --text-secondary: #5F5E5A;
+      --text-tertiary: #888780;
+      --radius-md: 8px;
+      --radius-lg: 12px;
+      --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
+    }
+    :root[data-theme="dark"] {
+      --bg: #1a1a18; --surface: #25241f; --surface-2: #2f2e29; --surface-3: #383631;
+      --border: rgba(255,255,255,0.12);
+      --text: #e8e6dd; --text-secondary: #b4b2a9; --text-tertiary: #888780;
+      --shadow-sm: 0 1px 2px rgba(0,0,0,0.4);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        --bg: #1a1a18; --surface: #25241f; --surface-2: #2f2e29; --surface-3: #383631;
+        --border: rgba(255,255,255,0.12);
+        --text: #e8e6dd; --text-secondary: #b4b2a9; --text-tertiary: #888780;
+        --shadow-sm: 0 1px 2px rgba(0,0,0,0.4);
+      }
+    }
+
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body {
+      font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg); color: var(--text);
+    }
+    nav {
+      display: flex; align-items: center; gap: 4px;
+      padding: 6px 24px; min-height: 56px;
+      border-bottom: 0.5px solid var(--border);
+      background: var(--surface);
+    }
+    nav a {
+      color: var(--text-secondary); text-decoration: none;
+      padding: 6px 14px; border-radius: var(--radius-md); font-size: 13px;
+    }
+    nav a.active { background: var(--surface-3); color: var(--text); font-weight: 500; }
+
+    main { padding: 24px; max-width: 1100px; margin: 0 auto; }
+
+    .panel {
+      background: var(--surface);
+      border: 0.5px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 24px;
+      box-shadow: var(--shadow-sm);
+    }
+    .panel h2 { margin: 0 0 4px; font-size: 18px; font-weight: 500; }
+    .panel .sub {
+      color: var(--text-secondary); font-size: 13px; line-height: 1.55;
+      margin: 0 0 18px; max-width: 760px;
+    }
+
+    /* The diagram placeholder (in the real app this is an SVG flowchart). */
+    .diagram {
+      border: 0.5px solid var(--border); border-radius: var(--radius-md);
+      background: var(--surface-2);
+      padding: 22px;
+      margin-bottom: 22px;
+      color: var(--text-secondary);
+      font-family: "SF Mono", Menlo, Consolas, monospace;
+      font-size: 12px; line-height: 1.7; white-space: pre;
+    }
+
+    /* Existing footer note in architecture — kept for context. */
+    .footnote {
+      font-size: 12px; color: var(--text-secondary);
+      padding: 10px 14px;
+      background: var(--surface-2);
+      border: 0.5px solid var(--surface-3);
+      border-radius: var(--radius-md);
+      margin-bottom: 14px;
+    }
+
+    /* ── Low-emphasis clarify note ────────────────────────────────────
+       The "household-days" explanation lives here now. It sits below
+       the diagram + footnote, framed as a definition list rather than
+       a colored card so it reads as reference material, not a banner. */
+    .definitions {
+      margin-top: 22px; padding-top: 18px;
+      border-top: 1px dashed var(--border);
+    }
+    .definitions h3 {
+      margin: 0 0 10px; font-size: 12px; font-weight: 600;
+      letter-spacing: 0.4px; text-transform: uppercase;
+      color: var(--text-tertiary);
+    }
+    .definitions dl {
+      margin: 0;
+      display: grid; grid-template-columns: 180px 1fr; gap: 8px 18px;
+      font-size: 13px; line-height: 1.55;
+    }
+    .definitions dt {
+      color: var(--text-secondary);
+      font-variant: small-caps; letter-spacing: 0.3px;
+    }
+    .definitions dd {
+      margin: 0; color: var(--text-secondary);
+    }
+    .definitions dd strong { color: var(--text); }
+    .definitions dd code {
+      font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 12px;
+      background: var(--surface-2); padding: 1px 5px; border-radius: 3px;
+    }
+  </style>
+</head>
+<body>
+  <nav>
+    <a>Home</a><a>Setup</a><a>Coverage</a><a>Compare</a>
+    <a>Heatmap</a><a>Overlap · pair</a><a>Overlap · network</a><a>Cluster</a>
+    <a>Composer</a><a>Verdict</a><a class="active">Architecture</a>
+  </nav>
+
+  <main>
+    <div class="panel">
+      <h2>Architecture</h2>
+      <p class="sub">
+        Narwal lives next to Hashtopolis in the same dev container but
+        doesn't fork it. The bridge talks to upstream's REST API, so upstream
+        updates don't carry diffs. Simulation uses <code>hashcat --stdout</code>
+        for fast interactive feedback; PCFG/OMEN run async for the headline
+        guess-number curves.
+      </p>
+
+      <div class="diagram">[ Hashtopolis devcontainer ]
+   ├─ Narwal web UI         ──▶  FastAPI backend  ──▶  Hashtopolis bridge
+   │   single-page · vanilla JS    plan = compose(target, refs, cluster)    REST · preview JSON
+   │
+   └─ tools: demeuk · hashcat --stdout · umap-learn · PCFG/OMEN · datasketch</div>
+
+      <div class="footnote">
+        Sidecar over fork. Upstream Hashtopolis moves; our diffs don't have
+        to. If something belongs upstream, we send a PR.
+      </div>
+
+      <!-- ── Low-emphasis clarify note (moved from home) ─────────────── -->
+      <div class="definitions">
+        <h3>Glossary</h3>
+        <dl>
+          <dt>household-day</dt>
+          <dd>
+            How Narwal reports savings — one number, one unit. Each plan is
+            translated into <strong>household-days</strong>: the electricity
+            an average Dutch home consumes in 24&nbsp;hours (≈10&nbsp;kWh).
+            One full day on the cluster ≈ <strong>9 household-days</strong>;
+            a clever 2-hour plan can save ~0.7&nbsp;household-days.
+          </dd>
+          <dt>cluster</dt>
+          <dd>
+            Default reference rig in the planner. <code>8× RTX&nbsp;4090 ≈ 3.6&nbsp;kW</code>
+            sustained → ≈ 86&nbsp;kWh per cluster-day.
+          </dd>
+          <dt>plan-only</dt>
+          <dd>
+            Narwal never attempts the user's target hashes itself. Simulation
+            runs against the reference corpora; <strong>Hashtopolis cracks</strong>
+            the real target.
+          </dd>
+        </dl>
+      </div>
+    </div>
+  </main>
+</body>
+</html>

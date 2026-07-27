@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>Crackalyzer — polar mockup 3 (coverage)</title>
+  <link rel="stylesheet" href="_polar.css"/>
+  <style>
+    .controls {
+      display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+      margin-bottom: 14px;
+    }
+    .controls label { font-size: 12px; color: var(--text-secondary); display: flex; flex-direction: column; gap: 2px; }
+    .controls select, .controls input { font: inherit; font-size: 13px; padding: 6px 10px; border: 0.5px solid var(--border-2); border-radius: 6px; background: var(--surface); }
+    .stepper {
+      display: inline-flex; align-items: stretch; border: 0.5px solid var(--border-2);
+      border-radius: 6px; background: var(--surface); overflow: hidden; height: 30px;
+    }
+    .stepper button { width: 26px; border: 0; background: var(--surface-2); color: var(--text-secondary); cursor: pointer; }
+    .stepper button:hover { background: var(--surface-3); color: var(--text); }
+    .stepper input { border: 0; outline: 0; background: transparent; text-align: center; width: 44px; padding: 0; font: inherit; }
+
+    .kv-row { display: grid; grid-template-columns: 180px 1fr; gap: 12px; }
+    .kv-row > div + div { color: var(--text-secondary); }
+
+    .chart {
+      margin-top: 20px; height: 380px; position: relative;
+      background: linear-gradient(180deg, #f6fbff 0%, #e7f2fc 60%, #d6ecf6 100%);
+      border-radius: 10px; padding: 18px 60px 56px 60px;
+      border: 0.5px solid var(--surface-3);
+    }
+    .chart .axis-y { position: absolute; top: 18px; left: 12px; bottom: 56px;
+      display: flex; flex-direction: column-reverse; justify-content: space-between;
+      font-size: 10px; color: var(--text-secondary); }
+    .chart .axis-y2 { position: absolute; top: 18px; right: 12px; bottom: 56px;
+      display: flex; flex-direction: column-reverse; justify-content: space-between;
+      font-size: 10px; color: var(--warning-text); }
+    .chart .bars {
+      position: absolute; left: 60px; right: 60px; top: 18px; bottom: 56px;
+      display: flex; align-items: flex-end; gap: 4px;
+    }
+    .chart .bars .bar {
+      flex: 1; background: linear-gradient(180deg, #cfeaf7, #7fb6dc);
+      border-top: 1.5px solid #ffffff; border-radius: 2px 2px 0 0;
+      position: relative;
+    }
+    .chart .bars .bar.kink { background: linear-gradient(180deg, #b9defa, #6caedb); }
+    .chart .axis-x {
+      position: absolute; left: 60px; right: 60px; bottom: 6px;
+      display: flex; gap: 4px;
+    }
+    .chart .axis-x .tick {
+      flex: 1; font-family: monospace; font-size: 10px; color: var(--text-secondary);
+      transform-origin: top left; transform: rotate(45deg) translateY(8px);
+      white-space: nowrap;
+    }
+    .kink-line {
+      position: absolute; top: 18px; bottom: 56px; left: 0;
+      width: 1px; border-left: 1.5px dashed var(--warning-border);
+    }
+    .kink-label {
+      position: absolute; top: 18px; padding: 4px 10px;
+      background: var(--warning-bg); color: var(--warning-text); border: 1px solid var(--warning-border);
+      border-radius: 6px; font-size: 11px; transform: translateX(-50%);
+      display: flex; align-items: center; gap: 6px; white-space: nowrap;
+    }
+    .bear-onkink {
+      position: absolute; top: 86px; transform: translateX(-50%);
+      width: 64px;
+    }
+    .melt-axis {
+      position: absolute; right: -50px; top: 0; bottom: 0;
+      writing-mode: vertical-rl; font-size: 11px; color: var(--warning-text);
+    }
+    .legend {
+      display: flex; gap: 18px; font-size: 12px; color: var(--text-secondary);
+      align-items: center; margin-top: 10px;
+    }
+    .legend .sw { width: 14px; height: 10px; border-radius: 2px; display: inline-block; margin-right: 4px; vertical-align: middle; }
+    .top-stat {
+      background: var(--success-bg); color: var(--success-text);
+      padding: 12px 16px; border-radius: 8px; border: 1px solid var(--success-border);
+      display: flex; gap: 16px; align-items: center;
+    }
+    .top-stat .num { font-size: 20px; font-weight: 700; }
+    .top-stat .lbl { font-size: 12px; line-height: 1.4; }
+    .top-stat .bear-mini { width: 32px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Crackalyzer</h1>
+    <span class="tagline">coverage — cumulative mask curve</span>
+    <span class="meter">
+      this week: <span class="pill">+2.4 h ice saved</span>
+      <span class="pill">87 bears warm</span>
+    </span>
+  </header>
+  <nav>
+    <a>Home</a><a>Setup</a><a>Composer</a><a class="active">Coverage</a>
+    <a>Compare</a><a>Heatmap</a><a>Overlap</a><a>Cluster</a><a>Verdict</a><a>Architecture</a>
+  </nav>
+  <main>
+    <div class="panel">
+      <h2>Coverage</h2>
+      <div class="sub">Cumulative mask coverage per Van Heijningen 2013 fig. O.2. Past the <strong>budget kink</strong>, additional masks cost more melt per crack.</div>
+
+      <div class="controls">
+        <label>Dataset
+          <select><option>rockyou</option></select>
+        </label>
+        <label>Hash type
+          <select><option>NTLM</option></select>
+        </label>
+        <label>GPU count
+          <span class="stepper"><button>−</button><input value="8"/><button>+</button></span>
+        </label>
+        <label>Max length
+          <span class="stepper"><button>−</button><input value="12"/><button>+</button></span>
+        </label>
+        <label>Top N
+          <span class="stepper"><button>−</button><input value="30"/><button>+</button></span>
+        </label>
+      </div>
+
+      <div class="top-stat">
+        <svg class="bear-mini" viewBox="0 0 100 90" xmlns="http://www.w3.org/2000/svg">
+          <ellipse cx="50" cy="62" rx="38" ry="22" fill="#fafdff" stroke="#7a8a96" stroke-width="0.8"/>
+          <circle  cx="50" cy="36" r="22"           fill="#fafdff" stroke="#7a8a96" stroke-width="0.8"/>
+          <circle  cx="33" cy="22" r="7"            fill="#fafdff" stroke="#7a8a96" stroke-width="0.8"/>
+          <circle  cx="67" cy="22" r="7"            fill="#fafdff" stroke="#7a8a96" stroke-width="0.8"/>
+          <circle  cx="33" cy="22" r="3.6"          fill="#e6c4b0"/>
+          <circle  cx="67" cy="22" r="3.6"          fill="#e6c4b0"/>
+          <ellipse cx="50" cy="44" rx="11" ry="7"   fill="#ffffff" stroke="#9caab6" stroke-width="0.6"/>
+          <ellipse cx="50" cy="40" rx="3.4" ry="2.4" fill="#1b1b18"/>
+          <circle  cx="41" cy="33" r="2.3"          fill="#1b1b18"/>
+          <circle  cx="59" cy="33" r="2.3"          fill="#1b1b18"/>
+          <path    d="M44 46 Q50 51 56 46" stroke="#1b1b18" stroke-width="1.4" fill="none" stroke-linecap="round"/>
+        </svg>
+        <div class="num">stop at #19</div>
+        <div class="lbl">
+          past mask #19 your plan covers <strong>+4.6 %</strong> for <strong>+18.3 h</strong> of GPU melt.
+          stopping here saves an estimated <strong>1 bear-week of sea-ice</strong>.
+        </div>
+      </div>
+
+      <div class="chart">
+        <div class="axis-y">
+          <span>0%</span><span>20%</span><span>40%</span><span>60%</span><span>80%</span><span>100%</span>
+        </div>
+        <div class="bars" id="bars"></div>
+        <div class="kink-line" style="left: calc(60px + (60% * (100% - 120px) / 100%))"></div>
+        <div class="kink-label" style="left: 60%">🐻‍❄️ budget kink — bear's snack break</div>
+        <div class="bear-onkink" style="left: 60%">
+          <svg viewBox="0 0 100 90" xmlns="http://www.w3.org/2000/svg">
+            <ellipse cx="50" cy="62" rx="38" ry="22" fill="#fafdff" stroke="#7a8a96" stroke-width="0.8"/>
+            <circle  cx="50" cy="36" r="22"           fill="#fafdff" stroke="#7a8a96" stroke-width="0.8"/>
+            <circle  cx="33" cy="22" r="7"            fill="#fafdff" stroke="#7a8a96" stroke-width="0.8"/>
+            <circle  cx="67" cy="22" r="7"            fill="#fafdff" stroke="#7a8a96" stroke-width="0.8"/>
+            <circle  cx="33" cy="22" r="3.6"          fill="#e6c4b0"/>
+            <circle  cx="67" cy="22" r="3.6"          fill="#e6c4b0"/>
+            <ellipse cx="50" cy="44" rx="11" ry="7"   fill="#ffffff" stroke="#9caab6" stroke-width="0.6"/>
+            <ellipse cx="50" cy="40" rx="3.4" ry="2.4" fill="#1b1b18"/>
+            <circle  cx="41" cy="33" r="2.3"          fill="#1b1b18"/>
+            <circle  cx="59" cy="33" r="2.3"          fill="#1b1b18"/>
+            <path    d="M44 46 Q50 51 56 46" stroke="#1b1b18" stroke-width="1.4" fill="none" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <div class="axis-y2">
+          <span>0.1 ms</span><span>1 ms</span><span>10 ms</span><span>1 s</span>
+          <span>2 min</span><span>27.8 h</span><span>11.6 d</span><span>3.2 y</span><span>317 y</span>
+        </div>
+        <div class="axis-x" id="ticks"></div>
+      </div>
+
+      <div class="legend">
+        <span><i class="sw" style="background:linear-gradient(180deg,#cfeaf7,#7fb6dc)"></i>cumulative coverage (% cracked)</span>
+        <span><i class="sw" style="background:var(--warning-bg);border:1px solid var(--warning-border)"></i>melt rate (GPU-hours / mask)</span>
+        <span>🐻‍❄️ kink — past this, each new mask warms the planet more than it cracks.</span>
+      </div>
+    </div>
+
+    <script>
+      // tiny bar chart filler
+      const heights = [12,18,27,36,40,45,47,52,55,58,59,61,63,65,68,69,72,74,76,78,79,80,81,84,85,87,87,89,91,92];
+      const labels  = ["?l×6","?l×7","?d×6","?l×8","?d×7","?l?l?l?l?d×2","?l×6?d","?l×5?d×2","?d×8","?l×4?d×2","?u?l×5","?u?l×4?d×2","?l×7?d","?l×4","?u?l×4","?l×6?d×2","?l×8?d","?l×4?d?d","?l?l?l?l?l?l?l?l?d?d","?d×6","?d×4","?l×3","?l?l?l?l","?l×5","?l×5?d","?l?l?l?l?l?l?l?l?l?l","?l?l?l?l?l?l?l?l?l?l?d","?l?l?l?l?l?l?l?l?l?l?l","?l×9","?l?l?l?l?l?l?l?l?l?l?l?l"];
+      const bars = document.getElementById("bars");
+      const ticks = document.getElementById("ticks");
+      heights.forEach((h, i) => {
+        const b = document.createElement("div");
+        b.className = "bar" + (i === 18 ? " kink" : "");
+        b.style.height = h + "%";
+        bars.appendChild(b);
+        const t = document.createElement("span");
+        t.className = "tick";
+        t.textContent = labels[i] || "";
+        ticks.appendChild(t);
+      });
+    </script>
+  </main>
+</body>
+</html>

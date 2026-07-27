@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Narwal — storyboard</title>
+<style>
+  :root {
+    --bg: #fafaf7;
+    --surface: #ffffff;
+    --surface-2: #f4f3ee;
+    --border: rgba(0,0,0,0.12);
+    --border-2: rgba(0,0,0,0.2);
+    --text: #2C2C2A;
+    --text-secondary: #5F5E5A;
+    --text-tertiary: #888780;
+    --info-bg: #E6F1FB;
+    --info-text: #0C447C;
+    --success-bg: #EAF3DE;
+    --success-text: #27500A;
+    --warning-bg: #FAEEDA;
+    --warning-text: #633806;
+    --danger-bg: #FCEBEB;
+    --danger-text: #791F1F;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1a1a18;
+      --surface: #25241f;
+      --surface-2: #2f2e29;
+      --border: rgba(255,255,255,0.12);
+      --border-2: rgba(255,255,255,0.2);
+      --text: #e8e6dd;
+      --text-secondary: #b4b2a9;
+      --text-tertiary: #888780;
+      --info-bg: #042C53;
+      --info-text: #B5D4F4;
+      --success-bg: #173404;
+      --success-text: #C0DD97;
+      --warning-bg: #412402;
+      --warning-text: #FAC775;
+      --danger-bg: #501313;
+      --danger-text: #F7C1C1;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 15px;
+    line-height: 1.6;
+  }
+  .container {
+    max-width: 880px;
+    margin: 0 auto;
+    padding: 2rem 1.5rem 4rem;
+  }
+  h1 { font-size: 28px; font-weight: 500; margin: 0 0 4px; }
+  h2 { font-size: 20px; font-weight: 500; margin: 3rem 0 4px; }
+  h3 { font-size: 16px; font-weight: 500; margin: 1.5rem 0 8px; }
+  .subtitle { color: var(--text-secondary); margin: 0 0 1rem; }
+  .toc {
+    background: var(--surface-2);
+    padding: 1rem 1.25rem;
+    border-radius: var(--radius-lg);
+    margin: 2rem 0;
+  }
+  .toc a { color: var(--info-text); text-decoration: none; }
+  .toc a:hover { text-decoration: underline; }
+  .toc ol { margin: 0; padding-left: 1.25rem; }
+  .toc li { margin: 4px 0; }
+  .scene {
+    background: var(--surface);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 1.5rem;
+    margin: 1rem 0;
+  }
+  .scene-label {
+    color: var(--text-tertiary);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 4px;
+  }
+  button, select {
+    font: inherit;
+    font-size: 13px;
+    padding: 6px 12px;
+    border-radius: var(--radius-md);
+    border: 0.5px solid var(--border-2);
+    background: transparent;
+    color: var(--text);
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  button:hover, select:hover { background: var(--surface-2); }
+  button:active { transform: scale(0.98); }
+  .pill {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 500;
+  }
+  .pill-info { background: var(--info-bg); color: var(--info-text); }
+  .pill-success { background: var(--success-bg); color: var(--success-text); }
+  .pill-warning { background: var(--warning-bg); color: var(--warning-text); }
+  .pill-danger { background: var(--danger-bg); color: var(--danger-text); }
+  svg { display: block; max-width: 100%; height: auto; }
+  .note {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-top: 12px;
+    padding: 10px 12px;
+    background: var(--surface-2);
+    border-radius: var(--radius-md);
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>Narwal</h1>
+<p class="subtitle">Pre-attack password planner — storyboard of the seven scenes.</p>
+
+<div class="toc">
+  <ol>
+    <li><a href="#s1">Scene 1 — Setup &amp; dataset selection</a></li>
+    <li><a href="#s2">Scene 2 — The attack composer</a></li>
+    <li><a href="#s3">Scene 3 — Cumulative mask coverage <span class="pill pill-info">headline</span></a></li>
+    <li><a href="#s3b">Scene 3b — Per-position frequency heatmap</a></li>
+    <li><a href="#s4">Scene 4 — Attack overlap viewer (Jaccard)</a></li>
+    <li><a href="#s5">Scene 5 — Dataset similarity cluster</a></li>
+    <li><a href="#s6">Scene 6 — Verdict &amp; recommendation</a></li>
+    <li><a href="#s7">Scene 7 — Architecture (Hashtopolis sidecar)</a></li>
+  </ol>
+</div>
+
+<h2 id="s1">Scene 1 — Setup &amp; dataset selection</h2>
+<p>Three rails: pick reference datasets to compare against, upload the target hashlist (plan-only by default), set the cluster spec that drives every runtime estimate downstream.</p>
+<div class="scene">
+<svg viewBox="0 0 680 440" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Setup screen mockup">
+<text x="40" y="28" font-size="12" fill="var(--text-secondary)">Scene 1 · Setup</text>
+<rect x="40" y="44" width="180" height="376" rx="12" fill="var(--surface-2)" stroke="var(--border)" stroke-width="0.5"/>
+<text x="56" y="68" font-size="14" font-weight="500" fill="var(--text)">Reference datasets</text>
+<text x="56" y="84" font-size="12" fill="var(--text-secondary)">demeuk · cached</text>
+<rect x="56" y="100" width="148" height="40" rx="6" fill="#E1F5EE" stroke="#0F6E56" stroke-width="0.5"/>
+<text x="68" y="118" font-size="13" font-weight="500" fill="#04342C">RockYou</text>
+<text x="68" y="132" font-size="11" fill="#0F6E56">14.3M · cleaned</text>
+<rect x="56" y="148" width="148" height="40" rx="6" fill="#E1F5EE" stroke="#0F6E56" stroke-width="0.5"/>
+<text x="68" y="166" font-size="13" font-weight="500" fill="#04342C">HIBP top10M</text>
+<text x="68" y="180" font-size="11" fill="#0F6E56">10M · cleaned</text>
+<rect x="56" y="196" width="148" height="40" rx="6" fill="#E1F5EE" stroke="#0F6E56" stroke-width="0.5"/>
+<text x="68" y="214" font-size="13" font-weight="500" fill="#04342C">COMB</text>
+<text x="68" y="228" font-size="11" fill="#0F6E56">3.2B · cleaning…</text>
+<rect x="56" y="244" width="148" height="40" rx="6" fill="#F1EFE8" stroke="#5F5E5A" stroke-width="0.5"/>
+<text x="68" y="262" font-size="13" font-weight="500" fill="#2C2C2A">LinkedIn 2012</text>
+<text x="68" y="276" font-size="11" fill="#5F5E5A">117M · raw</text>
+<rect x="56" y="292" width="148" height="40" rx="6" fill="#F1EFE8" stroke="#5F5E5A" stroke-width="0.5"/>
+<text x="68" y="310" font-size="13" font-weight="500" fill="#2C2C2A">000webhost</text>
+<text x="68" y="324" font-size="11" fill="#5F5E5A">15M · raw</text>
+<rect x="56" y="340" width="148" height="32" rx="6" fill="none" stroke="var(--border-2)" stroke-width="0.5" stroke-dasharray="3 3"/>
+<text x="130" y="360" text-anchor="middle" font-size="11" fill="var(--text-secondary)">+ add custom</text>
+<rect x="236" y="44" width="232" height="376" rx="12" fill="var(--surface-2)" stroke="var(--border)" stroke-width="0.5"/>
+<text x="252" y="68" font-size="14" font-weight="500" fill="var(--text)">Target hashlist</text>
+<text x="252" y="84" font-size="12" fill="var(--text-secondary)">drop or upload</text>
+<rect x="252" y="100" width="200" height="120" rx="8" fill="none" stroke="var(--border-2)" stroke-width="0.5" stroke-dasharray="4 4"/>
+<text x="352" y="156" text-anchor="middle" font-size="12" fill="var(--text-secondary)">drop hashlist here</text>
+<text x="352" y="174" text-anchor="middle" font-size="11" fill="var(--text-tertiary)">NTLM · bcrypt · MD5</text>
+<text x="252" y="244" font-size="12" fill="var(--text-secondary)">Hash type</text>
+<rect x="252" y="252" width="200" height="32" rx="6" fill="var(--surface-2)" stroke="var(--border)" stroke-width="0.5"/>
+<text x="264" y="272" font-size="13" font-weight="500" fill="var(--text)">NTLM (mode 1000)</text>
+<text x="252" y="304" font-size="12" fill="var(--text-secondary)">Mode</text>
+<rect x="252" y="312" width="96" height="32" rx="6" fill="#E6F1FB" stroke="#185FA5" stroke-width="0.5"/>
+<text x="300" y="332" text-anchor="middle" font-size="13" font-weight="500" fill="#0C447C">Plan only</text>
+<rect x="356" y="312" width="96" height="32" rx="6" fill="var(--surface-2)" stroke="var(--border)" stroke-width="0.5"/>
+<text x="404" y="332" text-anchor="middle" font-size="12" fill="var(--text-secondary)">Plan + run</text>
+<rect x="252" y="360" width="200" height="40" rx="8" fill="#FAEEDA" stroke="#BA7517" stroke-width="0.5"/>
+<text x="352" y="384" text-anchor="middle" font-size="13" font-weight="500" fill="#412402">Profile target</text>
+<rect x="484" y="44" width="156" height="376" rx="12" fill="var(--surface-2)" stroke="var(--border)" stroke-width="0.5"/>
+<text x="500" y="68" font-size="14" font-weight="500" fill="var(--text)">Cluster spec</text>
+<text x="500" y="84" font-size="12" fill="var(--text-secondary)">estimated speed</text>
+<text x="500" y="108" font-size="11" fill="var(--text-secondary)">GPU model</text>
+<rect x="500" y="116" width="124" height="28" rx="6" fill="var(--surface-2)" stroke="var(--border)" stroke-width="0.5"/>
+<text x="510" y="135" font-size="13" font-weight="500" fill="var(--text)">RTX 5080</text>
+<text x="500" y="164" font-size="11" fill="var(--text-secondary)">Count</text>
+<rect x="500" y="172" width="124" height="28" rx="6" fill="var(--surface-2)" stroke="var(--border)" stroke-width="0.5"/>
+<text x="510" y="191" font-size="13" font-weight="500" fill="var(--text)">8 cards</text>
+<text x="500" y="220" font-size="11" fill="var(--text-secondary)">Hashcat speed</text>
+<rect x="500" y="228" width="124" height="56" rx="6" fill="#E1F5EE" stroke="#0F6E56" stroke-width="0.5"/>
+<text x="562" y="252" text-anchor="middle" font-size="13" font-weight="500" fill="#04342C">~840 GH/s</text>
+<text x="562" y="270" text-anchor="middle" font-size="11" fill="#0F6E56">NTLM estimate</text>
+<text x="500" y="304" font-size="11" fill="var(--text-secondary)">bcrypt</text>
+<rect x="500" y="312" width="124" height="40" rx="6" fill="#FAECE7" stroke="#993C1D" stroke-width="0.5"/>
+<text x="562" y="334" text-anchor="middle" font-size="13" font-weight="500" fill="#4A1B0C">~88 GH/s</text>
+<text x="562" y="348" text-anchor="middle" font-size="11" fill="#993C1D">cost factor 5</text>
+<rect x="500" y="368" width="124" height="32" rx="6" fill="none" stroke="var(--border-2)" stroke-width="0.5" stroke-dasharray="3 3"/>
+<text x="562" y="388" text-anchor="middle" font-size="11" fill="var(--text-secondary)">custom hashrate</text>
+</svg>
+</div>
+
+<h2 id="s2">Scene 2 — The attack composer</h2>
+<p>Drag attacks from the library into the pipeline, toggle blocks on/off, watch the budget meter and downstream curves recompute. Each block shows the expected residual hit rate after preceding attacks have already removed their share.</p>
+<div class="scene">
+<svg viewBox="0 0 680 500" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Attack composer mockup">
+<defs>
+<marker id="arr2" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+<path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+</marker>
+</defs>
+<text x="40" y="28" font-size="12" fill="var(--text-secondary)">Scene 2 · Compose the attack pipeline</text>
+<rect x="40" y="44" width="180" height="436" rx="12" fill="var(--surface-2)" stroke="var(--border)" stroke-width="0.5"/>
+<text x="56" y="68" font-size="14" font-weight="500" fill="var(--text)">Attack library</text>
+<text x="56" y="84" font-size="11" fill="var(--text-secondary)">drag into pipeline</text>
+<text x="56" y="108" font-size="11" fill="var(--text-secondary)">Wordlist + rule</text>
+<rect x="56" y="116" width="148" height="32" rx="6" fill="#E6F1FB" stroke="#185FA5" stroke-width="0.5"/>
+<text x="68" y="136" font-size="12" fill="#042C53">rockyou + best64</text>
+<rect x="56" y="156" width="148" height="32" rx="6" fill="#E6F1FB" stroke="#185FA5" stroke-width="0.5"/>
+<text x="68" y="176" font-size="12" fill="#042C53">rockyou + d3ad0ne</text>
+<rect x="56" y="196" width="148" height="32" rx="6" fill="#E6F1FB" stroke="#185FA5" stroke-width="0.5"/>
+<text x="68" y="216" font-size="12" fill="#042C53">hibp + unicorn</text>
+<rect x="56" y="236" width="148" height="32" rx="6" fill="#E6F1FB" stroke="#185FA5" stroke-width="0.5"/>
+<text x="68" y="256" font-size="12" fill="#042C53">comb + dive</text>
+<text x="56" y="296" font-size="11" fill="var(--text-secondary)">Mask attack</text>
+<rect x="56" y="304" width="148" height="32" rx="6" fill="#EEEDFE" stroke="#534AB7" stroke-width="0.5"/>
+<text x="68" y="324" font-size="12" fill="#26215C">?a?a?a?a?a?a</text>
+<rect x="56" y="344" width="148" height="32" rx="6" fill="#EEEDFE" stroke="#534AB7" stroke-width="0.5"/>
+<text x="68" y="364" font-size="12" fill="#26215C">?u?l?l?l?l?d?d</text>
+<rect x="56" y="384" width="148" height="32" rx="6" fill="#EEEDFE" stroke="#534AB7" stroke-width="0.5"/>
+<text x="68" y="404" font-size="12" fill="#26215C">?l?l?l?l?l?l?l?l</text>
+<rect x="56" y="432" width="148" height="32" rx="6" fill="none" stroke="var(--border-2)" stroke-width="0.5" stroke-dasharray="3 3"/>
+<text x="130" y="452" text-anchor="middle" font-size="11" fill="var(--text-secondary)">+ custom mask</text>
+<rect x="236" y="44" width="404" height="436" rx="12" fill="var(--surface-2)" stroke="var(--border)" stroke-width="0.5"/>
+<text x="252" y="68" font-size="14" font-weight="500" fill="var(--text)">Pipeline</text>
+<text x="252" y="84" font-size="11" fill="var(--text-secondary)">runs top to bottom · later attacks see residual hashes</text>
+<rect x="252" y="104" width="372" height="68" rx="8" fill="#E6F1FB" stroke="#185FA5" stroke-width="0.5"/>
+<text x="268" y="126" font-size="13" font-weight="500" fill="#042C53">1 · rockyou + best64</text>
+<text x="268" y="144" font-size="11" fill="#0C447C">14.3M × 77 rules · ~1.1B candidates</text>
+<text x="268" y="160" font-size="11" fill="#0C447C">est. 1.3s on cluster · expected hit 58%</text>
+<rect x="588" y="116" width="24" height="14" rx="7" fill="#27500A"/>
+<circle cx="606" cy="123" r="5" fill="#fff"/>
+<line x1="438" y1="172" x2="438" y2="184" stroke="var(--text-secondary)" stroke-width="1" marker-end="url(#arr2)"/>
+<rect x="252" y="188" width="372" height="68" rx="8" fill="#E6F1FB" stroke="#185FA5" stroke-width="0.5"/>
+<text x="268" y="210" font-size="13" font-weight="500" fill="#042C53">2 · hibp + unicorn</text>
+<text x="268" y="228" font-size="11" fill="#0C447C">10M × 86k rules · ~860B candidates</text>
+<text x="268" y="244" font-size="11" fill="#0C447C">est. 17m · expected residual hit 14%</text>
+<rect x="588" y="200" width="24" height="14" rx="7" fill="#27500A"/>
+<circle cx="606" cy="207" r="5" fill="#fff"/>
+<line x1="438" y1="256" x2="438" y2="268" stroke="var(--text-secondary)" stroke-width="1" marker-end="url(#arr2)"/>
+<rect x="252" y="272" width="372" height="68" rx="8" fill="#EEEDFE" stroke="#534AB7" stroke-width="0.5"/>
+<text x="268" y="294" font-size="13" font-weight="500" fill="#26215C">3 · mask ?a?a?a?a?a?a</text>
+<text x="268" y="312" font-size="11" fill="#3C3489">~735B candidates · printable 95-set</text>
+<text x="268" y="328" font-size="11" fill="#3C3489">est. 14m · expected residual hit 6%</text>
+<rect x="588" y="284" width="24" height="14" rx="7" fill="#27500A"/>
+<circle cx="606" cy="291" r="5" fill="#fff"/>
+<line x1="438" y1="340" x2="438" y2="352" stroke="var(--text-secondary)" stroke-width="1" marker-end="url(#arr2)"/>
+<rect x="252" y="356" width="372" height="56" rx="8" fill="none" stroke="var(--border-2)" stroke-width="0.5" stroke-dasharray="4 4"/>
+<text x="438" y="380" text-anchor="middle" font-size="12" fill="var(--text-secondary)">+ drop next attack here</text>
+<text x="438" y="398" text-anchor="middle" font-size="11" fill="var(--text-tertiary)">budget remaining ~5h 28m</text>
+<rect x="252" y="428" width="180" height="36" rx="8" fill="#FAEEDA" stroke="#BA7517" stroke-width="0.5"/>
+<text x="342" y="450" text-anchor="middle" font-size="13" font-weight="500" fill="#412402">Simulate pipeline</text>
+<rect x="444" y="428" width="180" height="36" rx="8" fill="var(--surface-2)" stroke="var(--border)" stroke-width="0.5"/>
+<text x="534" y="450" text-anchor="middle" font-size="12" fill="var(--text-secondary)">total budget · 6h cap</text>
+</svg>
+</div>
+
+<h2 id="s3">Scene 3 — Cumulative mask coverage <span class="pill pill-info">headline</span></h2>
+<p>Van Heijningen 2013 Appendix O.2, rendered live. Bars stack cumulative % cracked as masks are added in efficiency order. Dashed line on the right axis is cumulative cracking time on the 8× RTX 5080 cluster — the bend marks the natural budget kink.</p>
+<div class="scene">
+<div style="display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap;">
+  <button onclick="setCov('rockyou')">RockYou</button>
+  <button onclick="setCov('webhost')">000webhost</button>
+  <button onclick="setCov('compare')">compare</button>
+</div>
+<div style="position: relative; width: 100%; height: 380px;">
+  <canvas id="maskCov" role="img" aria-label="Cumulative mask coverage chart"></canvas>
+</div>
+<div style="display: flex; flex-wrap: wrap; gap: 16px; margin-top: 12px; font-size: 12px; color: var(--text-secondary);">
+  <span style="display: flex; align-items: center; gap: 6px;"><span style="width: 12px; height: 12px; border-radius: 2px; background: #534AB7;"></span>RockYou cum % · 14.3M</span>
+  <span style="display: flex; align-items: center; gap: 6px;"><span style="width: 12px; height: 12px; border-radius: 2px; background: #D85A30;"></span>000webhost cum % · 15M</span>
+  <span style="display: flex; align-items: center; gap: 6px;"><span style="width: 18px; height: 0; border-top: 2px dashed #BA7517;"></span>cracking time (min)</span>
+</div>
+<div class="note">RockYou cumulative reaches 67.19% at mask 25 — straight from Van Heijningen Table O.1. The first 19 masks crack ~57% of passwords in under 4 minutes on this cluster; the last six masks add only ~10% but cost most of the cumulative time.</div>
+</div>
+
+<h2 id="s3b">Scene 3b — Per-position frequency heatmap</h2>
+<p>Van Heijningen Figure 5 / Appendix T. Each cell is the percentage of passwords with character <em>c</em> at position <em>p</em>. Toggle datasets to see the dataset's character at a glance: vowels in early slots = natural-language, all-digits column = PIN-style (Taobao), shifted patterns = Cyrillic-keyboard (Mail.ru).</p>
+<div class="scene">
+<div style="display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap;">
+  <button onclick="setHM('rockyou')">RockYou</button>
+  <button onclick="setHM('webhost')">000webhost</button>
+  <button onclick="setHM('taobao')">Taobao</button>
+  <button onclick="setHM('mailru')">Mail.ru</button>
+  <button onclick="setHM('english')">English text (ref)</button>
+</div>
+<div id="hmWrap" style="width:100%; overflow:hidden;"></div>
+<div class="note"><strong>profile:</strong> <span id="hmProfile">English-like; vowels in early positions; digits dominate positions 7-8.</span></div>
+<div style="margin-top:8px; display:flex; align-items:center; gap:8px; font-size:11px; color:var(--text-secondary);">
+  <span>low</span>
+  <span style="display:inline-block; width:14px; height:14px; background:#FFFFFF; border:0.5px solid #ccc;"></span>
+  <span style="display:inline-block; width:14px; height:14px; background:#E6F1FB; border:0.5px solid #ccc;"></span>
+  <span style="display:inline-block; width:14px; height:14px; background:#85B7EB; border:0.5px solid #ccc;"></span>
+  <span style="display:inline-block; width:14px; height:14px; background:#185FA5; border:0.5px solid #ccc;"></span>
+  <span style="display:inline-block; width:14px; height:14px; background:#042C53; border:0.5px solid #ccc;"></span>
+  <span>high</span>
+</div>
+</div>
+
+<h2 id="s4">Scene 4 — Attack overlap viewer (Jaccard)</h2>
+<p>Two circles, overlap proportional to Jaccard. The verdict panel turns red/amber/green: redundant (drop one), partial (keep if budget allows), complementary (keep both). The ranked pair list at the bottom is one-click.</p>
+<div class="scene">
+<div style="display: flex; gap: 8px; margin-bottom: 16px; flex-wrap: wrap;">
+  <select id="aPick" style="flex:1; min-width:180px;">
+    <option value="0">rockyou + best64</option>
+    <option value="1" selected>rockyou + d3ad0ne</option>
+    <option value="2">hibp + unicorn</option>
+    <option value="3">comb + dive</option>
+    <option value="4">?a?a?a?a?a?a</option>
+    <option value="5">?u?l?l?l?l?d?d</option>
+  </select>
+  <span style="align-self: center; color: var(--text-secondary); font-size: 13px;">vs</span>
+  <select id="bPick" style="flex:1; min-width:180px;">
+    <option value="0" selected>rockyou + best64</option>
+    <option value="1">rockyou + d3ad0ne</option>
+    <option value="2">hibp + unicorn</option>
+    <option value="3">comb + dive</option>
+    <option value="4">?a?a?a?a?a?a</option>
+    <option value="5">?u?l?l?l?l?d?d</option>
+  </select>
+</div>
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start;">
+  <div style="position: relative; width: 100%; height: 240px;">
+    <svg viewBox="0 0 320 240" width="100%" height="100%" role="img" aria-label="Venn overlap">
+      <circle id="cA" cx="120" cy="120" r="80" fill="#534AB7" fill-opacity="0.35" stroke="#3C3489" stroke-width="1"/>
+      <circle id="cB" cx="200" cy="120" r="80" fill="#1D9E75" fill-opacity="0.35" stroke="#0F6E56" stroke-width="1"/>
+      <text id="labA" x="60" y="124" text-anchor="middle" font-size="11" fill="#3C3489" font-weight="500">A only</text>
+      <text id="labAn" x="60" y="140" text-anchor="middle" font-size="14" fill="#26215C" font-weight="500">42k</text>
+      <text id="labO" x="160" y="124" text-anchor="middle" font-size="11" fill="#444441" font-weight="500">both</text>
+      <text id="labOn" x="160" y="140" text-anchor="middle" font-size="14" fill="#2C2C2A" font-weight="500">148k</text>
+      <text id="labB" x="260" y="124" text-anchor="middle" font-size="11" fill="#0F6E56" font-weight="500">B only</text>
+      <text id="labBn" x="260" y="140" text-anchor="middle" font-size="14" fill="#04342C" font-weight="500">19k</text>
+    </svg>
+  </div>
+  <div>
+    <div style="display:flex; flex-direction:column; gap:10px;">
+      <div style="background: var(--surface-2); padding: 10px 12px; border-radius: 8px;">
+        <div style="font-size: 12px; color: var(--text-secondary);">Jaccard overlap</div>
+        <div id="jacc" style="font-size: 22px; font-weight: 500;">0.78</div>
+      </div>
+      <div style="background: var(--surface-2); padding: 10px 12px; border-radius: 8px;">
+        <div style="font-size: 12px; color: var(--text-secondary);">Marginal gain from running both</div>
+        <div id="gain" style="font-size: 22px; font-weight: 500;">+9%</div>
+      </div>
+      <div id="verdict" style="padding: 10px 12px; border-radius: 8px; border: 0.5px solid var(--border); font-size: 13px;">
+        <div style="font-weight: 500; margin-bottom: 4px;" id="verdictTitle">Redundant — drop one</div>
+        <div id="verdictBody" style="color: var(--text-secondary);">B finds mostly the same passwords as A.</div>
+      </div>
+    </div>
+  </div>
+</div>
+<div style="margin-top: 16px;">
+  <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 8px;">all pairs ranked by Jaccard · click to load</div>
+  <div id="pairList" style="display:flex; flex-direction:column; gap:4px;"></div>
+</div>
+</div>
+
+<h2 id="s5">Scene 5 — Dataset similarity cluster</h2>
+<p>UMAP projection of reference corpora. Distance ≈ password-distribution divergence; bubble size ≈ √cardinality. Three natural clusters: consumer leaks, corporate, high-entropy outliers. The MAYA RQ6 analog, operationalised for "where does my target land?"</p>
+<div class="scene">
+<svg viewBox="0 0 680 440" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Dataset similarity scatter">
+<text x="40" y="28" font-size="12" fill="var(--text-secondary)">Scene 5 · Which datasets behave alike?</text>
+<rect x="40" y="44" width="600" height="296" rx="12" fill="var(--surface)" stroke="var(--border)" stroke-width="0.5"/>
+<text x="56" y="68" font-size="14" font-weight="500" fill="var(--text)">Dataset similarity · UMAP projection</text>
+<text x="56" y="84" font-size="12" fill="var(--text-secondary)">distance ≈ password-distribution divergence · bubble ≈ √N</text>
+<ellipse cx="200" cy="200" rx="92" ry="64" fill="#534AB7" opacity="0.07"/>
+<text x="200" y="146" text-anchor="middle" font-size="11" fill="#534AB7">consumer leaks</text>
+<ellipse cx="440" cy="178" rx="64" ry="48" fill="#1D9E75" opacity="0.07"/>
+<text x="440" y="138" text-anchor="middle" font-size="11" fill="#1D9E75">corporate</text>
+<ellipse cx="540" cy="282" rx="44" ry="34" fill="#888780" opacity="0.1"/>
+<text x="540" y="254" text-anchor="middle" font-size="11" fill="#5F5E5A">high-entropy</text>
+<circle cx="172" cy="208" r="28" fill="#534AB7" opacity="0.7" stroke="#3C3489" stroke-width="0.5"/>
+<text x="172" y="212" text-anchor="middle" font-size="11" fill="#fff">RockYou</text>
+<circle cx="220" cy="184" r="26" fill="#534AB7" opacity="0.7" stroke="#3C3489" stroke-width="0.5"/>
+<text x="220" y="188" text-anchor="middle" font-size="11" fill="#fff">000webhost</text>
+<circle cx="228" cy="232" r="22" fill="#534AB7" opacity="0.7" stroke="#3C3489" stroke-width="0.5"/>
+<text x="228" y="236" text-anchor="middle" font-size="11" fill="#fff">MyHeritage</text>
+<circle cx="172" cy="240" r="20" fill="#534AB7" opacity="0.7" stroke="#3C3489" stroke-width="0.5"/>
+<text x="172" y="244" text-anchor="middle" font-size="11" fill="#fff">HIBP</text>
+<circle cx="418" cy="172" r="32" fill="#1D9E75" opacity="0.7" stroke="#0F6E56" stroke-width="0.5"/>
+<text x="418" y="176" text-anchor="middle" font-size="11" fill="#fff">LinkedIn</text>
+<circle cx="466" cy="192" r="22" fill="#1D9E75" opacity="0.7" stroke="#0F6E56" stroke-width="0.5"/>
+<text x="466" y="196" text-anchor="middle" font-size="11" fill="#fff">Adobe</text>
+<circle cx="538" cy="286" r="10" fill="#888780" opacity="0.75" stroke="#444441" stroke-width="0.5"/>
+<text x="538" y="306" text-anchor="middle" font-size="11" fill="#5F5E5A">Ashley M.</text>
+<circle cx="556" cy="274" r="8" fill="#888780" opacity="0.75" stroke="#444441" stroke-width="0.5"/>
+<line x1="100" y1="324" x2="600" y2="324" stroke="var(--border-2)" stroke-width="0.5"/>
+<line x1="100" y1="100" x2="100" y2="324" stroke="var(--border-2)" stroke-width="0.5"/>
+<rect x="40" y="356" width="600" height="68" rx="12" fill="var(--surface-2)" stroke="var(--border)" stroke-width="0.5"/>
+<text x="56" y="380" font-size="13" font-weight="500" fill="var(--text)">Reading this · click any bubble to drill in</text>
+<text x="56" y="402" font-size="12" fill="var(--text-secondary)">Datasets sharing a cluster respond similarly to the same attacks.</text>
+<text x="56" y="418" font-size="12" fill="var(--text-secondary)">If your target lands near RockYou, ro+best64 is a strong first move. Far away → mask attacks first.</text>
+</svg>
+</div>
+
+<h2 id="s6">Scene 6 — Verdict &amp; recommendation</h2>
+<p>The actual product output. Plain-English strongest/weakest, plus a recommended attack chain with per-step budget allocation, keyed to whichever cluster the target landed in on Scene 5. One button ships it to Hashtopolis.</p>
+<div class="scene">
+<svg viewBox="0 0 680 580" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Verdict panel">
+<text x="40" y="28" font-size="12" fill="var(--text-secondary)">Scene 6 · Verdict</text>
+<rect x="40" y="44" width="296" height="160" rx="12" fill="#E1F5EE" stroke="#0F6E56" stroke-width="0.5"/>
+<text x="56" y="68" font-size="11" fill="#0F6E56">strongest reference dataset</text>
+<text x="56" y="92" font-size="18" font-weight="500" fill="#04342C">000webhost</text>
+<text x="56" y="116" font-size="11" fill="#04342C">cumulative mask coverage 68.9% at mask 25</text>
+<text x="56" y="134" font-size="11" fill="#04342C">but takes 73% longer than RockYou to reach 60%</text>
+<text x="56" y="158" font-size="11" fill="#04342C">profile · policy-enforced 2-class minimum</text>
+<text x="56" y="184" font-size="11" fill="#04342C">expect masks to outperform dictionaries here</text>
+<rect x="344" y="44" width="296" height="160" rx="12" fill="#FCEBEB" stroke="#A32D2D" stroke-width="0.5"/>
+<text x="360" y="68" font-size="11" fill="#791F1F">weakest reference dataset</text>
+<text x="360" y="92" font-size="18" font-weight="500" fill="#501313">RockYou</text>
+<text x="360" y="116" font-size="11" fill="#501313">first 7 masks alone cover 40% in under 7 minutes</text>
+<text x="360" y="134" font-size="11" fill="#501313">classic English-like; vowels early, digits at tail</text>
+<text x="360" y="158" font-size="11" fill="#501313">profile · short, lowercase-heavy, dictionary-friendly</text>
+<text x="360" y="184" font-size="11" fill="#501313">ro+best64 alone clears most of it</text>
+<rect x="40" y="220" width="600" height="280" rx="12" fill="var(--surface-2)" stroke="var(--border)" stroke-width="0.5"/>
+<text x="56" y="244" font-size="14" font-weight="500" fill="var(--text)">Recommended attack chain for your target</text>
+<text x="56" y="262" font-size="11" fill="var(--text-secondary)">based on nearest cluster · LinkedIn / Adobe family · budget 6h</text>
+<rect x="56" y="280" width="568" height="44" rx="8" fill="#E6F1FB" stroke="#185FA5" stroke-width="0.5"/>
+<text x="72" y="300" font-size="13" font-weight="500" fill="#042C53">1 · rockyou + best64</text>
+<text x="72" y="316" font-size="11" fill="#0C447C">budget 2m · expected crack 47% · runs first because cheapest</text>
+<rect x="56" y="332" width="568" height="44" rx="8" fill="#E6F1FB" stroke="#185FA5" stroke-width="0.5"/>
+<text x="72" y="352" font-size="13" font-weight="500" fill="#042C53">2 · hibp + unicorn</text>
+<text x="72" y="368" font-size="11" fill="#0C447C">budget 17m · expected residual crack 14% · complementary to step 1</text>
+<rect x="56" y="384" width="568" height="44" rx="8" fill="#EEEDFE" stroke="#534AB7" stroke-width="0.5"/>
+<text x="72" y="404" font-size="13" font-weight="500" fill="#26215C">3 · mask ?u?l?l?l?l?d?d</text>
+<text x="72" y="420" font-size="11" fill="#3C3489">budget 4m · expected residual crack 8% · captures Capitalized99 patterns</text>
+<rect x="56" y="436" width="568" height="44" rx="8" fill="#EEEDFE" stroke="#534AB7" stroke-width="0.5"/>
+<text x="72" y="456" font-size="13" font-weight="500" fill="#26215C">4 · mask ?a?a?a?a?a?a</text>
+<text x="72" y="472" font-size="11" fill="#3C3489">budget 14m · expected residual crack 6% · clean-up sweep</text>
+<text x="56" y="495" font-size="11" fill="var(--text-secondary)">projected total · 73% cracked in 37m of 6h budget · headroom for longer masks</text>
+<rect x="40" y="516" width="296" height="48" rx="8" fill="#FAEEDA" stroke="#BA7517" stroke-width="0.5"/>
+<text x="188" y="544" text-anchor="middle" font-size="13" font-weight="500" fill="#412402">Send plan to Hashtopolis</text>
+<rect x="344" y="516" width="296" height="48" rx="8" fill="var(--surface-2)" stroke="var(--border)" stroke-width="0.5"/>
+<text x="492" y="544" text-anchor="middle" font-size="12" fill="var(--text-secondary)">Export plan as JSON</text>
+</svg>
+</div>
+
+<h2 id="s7">Scene 7 — Architecture (Hashtopolis sidecar)</h2>
+<p>Narwal lives alongside Hashtopolis in the same dev container but doesn't fork it. The bridge talks to upstream Hashtopolis's REST API, so upstream updates don't carry diffs. Simulation uses hashcat-stdout for fast interactive feedback; PCFG/OMEN run async for the headline guess-number curves.</p>
+<div class="scene">
+<svg viewBox="0 0 680 460" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Architecture diagram">
+<defs>
+<marker id="arr7" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+<path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+</marker>
+</defs>
+<text x="40" y="28" font-size="12" fill="var(--text-secondary)">Scene 7 · Architecture · sidecar inside Hashtopolis devcontainer</text>
+<rect x="40" y="48" width="600" height="376" rx="20" fill="#F1EFE8" stroke="#5F5E5A" stroke-width="0.5"/>
+<text x="56" y="72" font-size="14" font-weight="500" fill="#2C2C2A">Hashtopolis devcontainer</text>
+<text x="56" y="88" font-size="11" fill="#5F5E5A">docker compose · existing dev setup</text>
+<rect x="60" y="108" width="268" height="80" rx="10" fill="#E6F1FB" stroke="#185FA5" stroke-width="0.5"/>
+<text x="194" y="138" text-anchor="middle" font-size="13" font-weight="500" fill="#042C53">Narwal web UI</text>
+<text x="194" y="158" text-anchor="middle" font-size="11" fill="#0C447C">single-page · Chart.js</text>
+<text x="194" y="174" text-anchor="middle" font-size="11" fill="#0C447C">composer · curves · matrix · cluster</text>
+<rect x="352" y="108" width="268" height="80" rx="10" fill="#EEEDFE" stroke="#534AB7" stroke-width="0.5"/>
+<text x="486" y="138" text-anchor="middle" font-size="13" font-weight="500" fill="#26215C">Hashtopolis web UI</text>
+<text x="486" y="158" text-anchor="middle" font-size="11" fill="#3C3489">untouched · upstream</text>
+<text x="486" y="174" text-anchor="middle" font-size="11" fill="#3C3489">receives the generated plan</text>
+<line x1="194" y1="188" x2="194" y2="216" stroke="var(--text-secondary)" stroke-width="1" marker-end="url(#arr7)"/>
+<rect x="60" y="220" width="268" height="100" rx="10" fill="#E1F5EE" stroke="#0F6E56" stroke-width="0.5"/>
+<text x="194" y="244" text-anchor="middle" font-size="13" font-weight="500" fill="#04342C">FastAPI backend</text>
+<text x="194" y="264" text-anchor="middle" font-size="11" fill="#0F6E56">plan = compose(target, refs, cluster)</text>
+<text x="194" y="282" text-anchor="middle" font-size="11" fill="#0F6E56">caches cleaned datasets</text>
+<text x="194" y="300" text-anchor="middle" font-size="11" fill="#0F6E56">stores Jaccard + UMAP results</text>
+<line x1="328" y1="270" x2="350" y2="270" stroke="var(--text-secondary)" stroke-width="1" marker-end="url(#arr7)"/>
+<text x="339" y="262" text-anchor="middle" font-size="11" fill="var(--text-secondary)">plan JSON</text>
+<rect x="352" y="220" width="268" height="100" rx="10" fill="#FAEEDA" stroke="#BA7517" stroke-width="0.5"/>
+<text x="486" y="244" text-anchor="middle" font-size="13" font-weight="500" fill="#412402">Hashtopolis API bridge</text>
+<text x="486" y="264" text-anchor="middle" font-size="11" fill="#633806">REST calls · upstream API</text>
+<text x="486" y="282" text-anchor="middle" font-size="11" fill="#633806">creates tasks · ships wordlists</text>
+<text x="486" y="300" text-anchor="middle" font-size="11" fill="#633806">no fork · sidecar only</text>
+<rect x="60" y="340" width="120" height="60" rx="10" fill="#E1F5EE" stroke="#0F6E56" stroke-width="0.5"/>
+<text x="120" y="364" text-anchor="middle" font-size="13" font-weight="500" fill="#04342C">demeuk</text>
+<text x="120" y="382" text-anchor="middle" font-size="11" fill="#0F6E56">cleaning lib</text>
+<rect x="196" y="340" width="132" height="60" rx="10" fill="#E1F5EE" stroke="#0F6E56" stroke-width="0.5"/>
+<text x="262" y="364" text-anchor="middle" font-size="13" font-weight="500" fill="#04342C">hashcat --stdout</text>
+<text x="262" y="382" text-anchor="middle" font-size="11" fill="#0F6E56">candidate gen</text>
+<line x1="120" y1="340" x2="160" y2="324" stroke="var(--text-secondary)" stroke-width="0.5" stroke-dasharray="3 3"/>
+<line x1="262" y1="340" x2="230" y2="324" stroke="var(--text-secondary)" stroke-width="0.5" stroke-dasharray="3 3"/>
+<rect x="352" y="340" width="132" height="60" rx="10" fill="#FAEEDA" stroke="#BA7517" stroke-width="0.5"/>
+<text x="418" y="364" text-anchor="middle" font-size="13" font-weight="500" fill="#412402">PCFG · OMEN</text>
+<text x="418" y="382" text-anchor="middle" font-size="11" fill="#633806">guess-number est.</text>
+<rect x="500" y="340" width="120" height="60" rx="10" fill="#FAEEDA" stroke="#BA7517" stroke-width="0.5"/>
+<text x="560" y="364" text-anchor="middle" font-size="13" font-weight="500" fill="#412402">datasketch</text>
+<text x="560" y="382" text-anchor="middle" font-size="11" fill="#633806">MinHash · Jaccard</text>
+<line x1="418" y1="340" x2="418" y2="324" stroke="var(--text-secondary)" stroke-width="0.5" stroke-dasharray="3 3"/>
+<line x1="560" y1="340" x2="540" y2="324" stroke="var(--text-secondary)" stroke-width="0.5" stroke-dasharray="3 3"/>
+</svg>
+</div>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+const masks = ['?l?l?l?l','?d?d?d?d?d?d','?d?d?d?d?d?d?d','?l?l?l?l?l','?l?l?l?d?d?d','?l?l?l?l?d?d','?d?d?d?d?d?d?d?d','?l?l?l?l?l?d','?l?l?l?d?d?d?d','?l?l?l?l?l?l','?l?l?l?l?l?d?d','?l?l?l?l?l?l?d','?l?l?l?l?d?d?d?d','?l?l?l?l?l?l?l','?l?l?l?l?l?d?d?d','?l?l?l?l?l?l?d?d','?l?l?l?l?l?l?l?d','?l?l?l?l?l?d?d?d?d','?l?l?l?l?l?l?l?l','?l?l?l?l?l?l?d?d?d','?l?l?l?l?l?l?l?d?d','?l?l?l?l?l?l?l?l?d','?l?l?l?l?l?l?d?d?d?d','?l?l?l?l?l?l?l?l?l','?l?l?l?l?l?l?l?l?d?d'];
+const rockyou_cum = [1.45,5.85,7.59,10.23,11.5,13.12,15.66,17.45,18.58,28.45,30.17,31.88,33.65,40.41,42.09,45.79,47.67,48.87,56.58,58.17,59.77,61.02,62.25,65.73,67.19];
+const webhost_cum = [0.1,0.3,0.4,0.5,0.6,1.2,1.5,1.8,2.2,3.5,5.1,7.3,9.8,14.2,18.5,24.8,31.2,36.9,44.1,49.3,55.8,60.4,63.1,66.8,68.9];
+const keyspace = [456976,1e6,1e7,11881376,17576000,45697600,1e8,118813760,175760000,308915776,1188137600,3089157760,4569760000,8031810176,11881376000,30891577600,80318101760,118813760000,208827064576,308915776000,803181017600,2088270645760,3089157760000,5429503678976,20882706457600];
+const hashrate = 840e9;
+const cum_time = keyspace.reduce((a,k,i)=>{a.push((a[i-1]||0)+k/hashrate/60); return a;},[]);
+
+let covChart;
+function setCov(mode) {
+  const datasets = [];
+  if (mode === 'rockyou' || mode === 'compare') datasets.push({type:'bar', label:'RockYou', data:rockyou_cum, backgroundColor:'#534AB7', borderRadius:2, yAxisID:'y'});
+  if (mode === 'webhost' || mode === 'compare') datasets.push({type:'bar', label:'000webhost', data:webhost_cum, backgroundColor:'#D85A30', borderRadius:2, yAxisID:'y'});
+  datasets.push({type:'line', label:'time (min)', data:cum_time.map(t=>Math.round(t*10)/10), borderColor:'#BA7517', backgroundColor:'transparent', borderDash:[4,3], borderWidth:1.5, pointRadius:0, yAxisID:'y2', tension:0.2});
+  if (covChart) covChart.destroy();
+  covChart = new Chart(document.getElementById('maskCov'), {
+    data: {labels: masks, datasets},
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{display:false}, tooltip:{callbacks:{label:(c)=>{
+        if(c.dataset.yAxisID==='y2') return 'time: '+c.parsed.y.toFixed(1)+' min';
+        return c.dataset.label+': '+c.parsed.y.toFixed(2)+'%';
+      }}}},
+      scales:{
+        x:{ticks:{autoSkip:false, maxRotation:60, minRotation:60, font:{size:9}}, grid:{display:false}},
+        y:{position:'left', min:0, max:80, title:{display:true,text:'cumulative % cracked'}, ticks:{callback:v=>v+'%'}},
+        y2:{position:'right', min:0, max:200, title:{display:true,text:'cum. cracking time (min)'}, grid:{display:false}, ticks:{callback:v=>v+'m'}}
+      }
+    }
+  });
+}
+setCov('compare');
+
+const chars = ['a','e','i','o','u','r','n','s','l','t','m','c','1','2','0','9','3','5','8','7'];
+const positions = [1,2,3,4,5,6,7,8];
+const hmData = {
+  rockyou: [[8.2,12.1,3.5,7.1,2.8,4.1,2.9,3.0,4.5,5.2,5.0,4.8,2.1,1.0,0.8,0.5,0.4,0.3,0.2,0.2],[10.5,9.8,7.2,8.1,5.2,6.8,4.5,4.2,5.0,6.5,4.0,4.5,1.5,0.8,0.6,0.4,0.3,0.2,0.2,0.1],[9.1,8.5,6.5,7.8,4.5,5.8,7.2,5.5,6.8,5.2,4.5,5.0,2.0,1.0,0.7,0.5,0.4,0.3,0.2,0.2],[8.5,7.8,5.8,6.5,4.0,5.5,6.8,7.2,7.5,5.5,4.2,4.8,2.5,1.2,0.9,0.6,0.5,0.4,0.3,0.2],[7.2,6.5,4.5,5.5,3.5,4.8,5.5,6.5,8.2,5.0,3.8,4.2,3.5,1.8,1.2,0.8,0.6,0.5,0.4,0.3],[5.5,5.0,3.2,4.5,2.8,3.5,4.2,5.5,4.0,4.2,3.0,3.5,5.8,2.5,1.5,1.0,0.8,0.6,0.5,0.4],[3.2,3.5,2.0,2.8,1.5,2.0,2.5,3.2,2.5,2.8,2.0,2.2,11.5,6.5,3.5,2.5,2.0,1.5,1.2,1.0],[2.0,2.2,1.2,1.8,1.0,1.5,1.8,2.0,1.5,1.8,1.2,1.5,13.8,8.5,4.5,3.5,2.8,2.2,1.8,1.5]],
+  webhost: [[4.5,8.5,2.5,5.5,2.0,3.5,2.0,2.2,3.5,4.2,3.5,3.8,3.0,1.5,1.0,0.8,0.6,0.5,0.4,0.3],[8.5,7.5,5.5,6.5,4.0,5.5,3.5,3.5,4.0,5.5,3.2,3.8,2.5,1.2,0.8,0.6,0.5,0.4,0.3,0.2],[8.0,7.2,5.5,7.0,3.8,5.0,5.8,4.5,5.5,4.5,3.8,4.2,3.0,1.5,1.0,0.7,0.5,0.4,0.3,0.2],[7.5,6.8,5.0,5.8,3.5,4.8,5.5,6.2,6.5,4.8,3.5,4.2,3.5,1.8,1.2,0.9,0.7,0.5,0.4,0.3],[5.5,5.0,3.5,4.5,2.8,3.8,4.5,5.2,6.5,4.0,3.0,3.5,5.5,3.2,2.0,1.5,1.2,0.9,0.7,0.5],[3.5,3.2,2.2,3.0,1.8,2.5,3.0,3.5,2.8,2.8,2.0,2.5,8.5,5.5,3.0,2.5,2.0,1.5,1.2,1.0],[2.0,2.0,1.2,1.8,1.0,1.5,1.8,2.0,1.5,1.8,1.2,1.5,12.5,8.5,4.5,3.5,2.8,2.2,1.8,1.5],[1.2,1.2,0.8,1.0,0.6,0.8,1.0,1.2,0.8,1.0,0.6,0.8,15.2,9.5,5.5,4.2,3.5,2.8,2.2,1.8]],
+  taobao: [[0.5,0.6,0.4,0.5,0.3,0.4,0.3,0.3,0.3,0.4,0.3,0.3,18.5,12.2,8.5,4.5,3.5,3.0,2.5,2.2],[0.6,0.7,0.5,0.6,0.3,0.4,0.3,0.3,0.4,0.5,0.3,0.4,15.2,11.8,8.0,4.0,3.2,2.8,2.2,2.0],[0.7,0.8,0.5,0.7,0.4,0.5,0.4,0.4,0.5,0.6,0.4,0.5,14.5,11.5,7.8,3.8,3.0,2.5,2.0,1.8],[0.8,0.9,0.6,0.8,0.4,0.6,0.5,0.5,0.6,0.7,0.5,0.6,13.8,11.2,7.5,3.5,2.8,2.2,1.8,1.5],[0.7,0.8,0.5,0.7,0.4,0.5,0.5,0.5,0.5,0.6,0.4,0.5,14.5,11.5,8.0,3.8,3.0,2.5,2.0,1.8],[0.6,0.7,0.5,0.6,0.3,0.5,0.4,0.4,0.5,0.5,0.4,0.5,15.2,12.0,8.5,4.0,3.2,2.8,2.2,2.0],[0.5,0.6,0.4,0.5,0.3,0.4,0.3,0.3,0.4,0.4,0.3,0.3,16.5,12.8,9.0,4.5,3.5,3.0,2.5,2.2],[0.4,0.5,0.3,0.4,0.2,0.3,0.3,0.3,0.3,0.4,0.2,0.3,17.5,13.5,9.5,5.0,4.0,3.5,2.8,2.5]],
+  mailru: [[3.5,4.5,2.5,3.5,2.0,3.5,2.0,2.5,3.0,3.5,2.5,2.8,8.5,3.5,2.5,1.5,1.2,0.8,0.6,0.5],[4.5,5.5,3.5,4.5,2.5,4.5,3.0,3.5,3.5,4.5,3.0,3.2,7.5,3.0,2.0,1.5,1.0,0.7,0.5,0.4],[5.5,6.5,4.5,5.5,3.0,5.5,4.0,4.5,4.5,5.5,3.5,4.0,6.5,2.5,1.8,1.2,0.9,0.6,0.5,0.4],[5.0,6.0,4.0,5.0,2.8,5.0,4.5,5.0,5.0,5.0,3.2,3.8,7.5,3.0,2.0,1.5,1.0,0.7,0.5,0.4],[4.0,4.5,3.0,4.0,2.5,4.0,4.0,4.5,4.5,4.0,2.8,3.2,9.5,4.5,3.0,2.0,1.5,1.0,0.8,0.6],[3.0,3.5,2.5,3.0,2.0,3.0,3.0,3.5,3.0,3.0,2.0,2.5,11.5,5.5,3.5,2.5,2.0,1.5,1.2,1.0],[2.0,2.5,1.5,2.0,1.5,2.0,2.0,2.5,2.0,2.5,1.5,2.0,13.5,7.5,4.5,3.5,2.8,2.2,1.8,1.5],[1.5,1.5,1.0,1.2,1.0,1.5,1.5,1.5,1.2,1.5,1.0,1.2,15.5,9.5,5.5,4.2,3.5,2.8,2.2,1.8]],
+  english: [[8.5,12.7,6.5,7.5,2.8,5.9,6.8,6.3,4.0,9.0,2.4,2.8,0,0,0,0,0,0,0,0],[12.7,8.5,10.5,7.5,4.5,5.9,5.5,4.5,5.5,7.0,2.4,2.8,0,0,0,0,0,0,0,0],[8.5,10.7,7.5,8.5,3.8,6.0,7.0,6.5,4.5,9.0,2.4,2.8,0,0,0,0,0,0,0,0],[9.0,12.7,7.0,8.0,3.5,6.5,6.5,6.5,5.0,9.5,2.4,2.8,0,0,0,0,0,0,0,0],[8.5,12.5,6.8,7.5,3.5,6.5,7.0,6.8,5.5,9.0,2.4,2.8,0,0,0,0,0,0,0,0],[8.0,12.0,6.5,7.0,3.5,6.5,7.5,7.5,6.5,9.0,2.4,2.8,0,0,0,0,0,0,0,0],[7.5,11.5,6.5,7.0,3.5,6.5,7.5,7.5,7.0,9.0,2.4,2.8,0,0,0,0,0,0,0,0],[7.5,11.5,6.5,7.0,3.5,6.5,7.5,7.5,7.0,9.0,2.4,2.8,0,0,0,0,0,0,0,0]]
+};
+const hmProfiles = {
+  rockyou: 'English-like; vowels concentrated in early positions; digits dominate positions 7-8.',
+  webhost: 'Like RockYou but stricter; digits in tail even more concentrated (policy effect).',
+  taobao: 'Almost entirely digit-driven across all positions. No alphabetic structure — Chinese users typing PIN-like passwords.',
+  mailru: 'Cyrillic-keyboard pattern. Latin chars present from keyboard maps; digits in tail like Latin-script datasets.',
+  english: 'Reference distribution from Mayzner-revisited; no digits, vowel/consonant pattern only.'
+};
+function colorFor(v, maxV) {
+  const t = Math.min(v / maxV, 1);
+  if (t < 0.01) return '#FFFFFF';
+  if (t < 0.20) return '#E6F1FB';
+  if (t < 0.40) return '#B5D4F4';
+  if (t < 0.60) return '#85B7EB';
+  if (t < 0.80) return '#185FA5';
+  return '#042C53';
+}
+function setHM(ds) {
+  document.getElementById('hmProfile').textContent = hmProfiles[ds];
+  const grid = hmData[ds];
+  const maxV = Math.max.apply(null, grid.flat());
+  const W = 680, leftPad = 36, topPad = 28, bottomPad = 24, rightPad = 8;
+  const cellW = (W - leftPad - rightPad) / chars.length;
+  const cellH = 28;
+  const H = topPad + cellH * positions.length + bottomPad;
+  let svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" role="img" aria-label="Per-position character frequency heatmap" xmlns="http://www.w3.org/2000/svg">';
+  for (let ci = 0; ci < chars.length; ci++) {
+    const x = leftPad + ci * cellW + cellW / 2;
+    svg += '<text x="' + x + '" y="' + (topPad - 8) + '" text-anchor="middle" font-size="11" font-family="sans-serif" fill="#5F5E5A">' + chars[ci] + '</text>';
+  }
+  for (let pi = 0; pi < positions.length; pi++) {
+    const y = topPad + pi * cellH + cellH / 2;
+    svg += '<text x="' + (leftPad - 8) + '" y="' + (y + 4) + '" text-anchor="end" font-size="10" font-family="sans-serif" fill="#5F5E5A">p' + positions[pi] + '</text>';
+  }
+  for (let pi = 0; pi < positions.length; pi++) {
+    for (let ci = 0; ci < chars.length; ci++) {
+      const v = grid[pi][ci];
+      const x = leftPad + ci * cellW;
+      const y = topPad + pi * cellH;
+      const fill = colorFor(v, maxV);
+      svg += '<rect x="' + x + '" y="' + y + '" width="' + (cellW - 1) + '" height="' + (cellH - 1) + '" fill="' + fill + '" stroke="#fff" stroke-width="0.5"><title>position ' + positions[pi] + ' \u00b7 "' + chars[ci] + '" \u00b7 ' + v.toFixed(1) + '%</title></rect>';
+      if (v >= maxV * 0.25) {
+        const tcol = (v / maxV) > 0.55 ? '#ffffff' : '#2C2C2A';
+        svg += '<text x="' + (x + cellW / 2) + '" y="' + (y + cellH / 2 + 3) + '" text-anchor="middle" font-size="9" font-family="sans-serif" fill="' + tcol + '" pointer-events="none">' + v.toFixed(0) + '</text>';
+      }
+    }
+  }
+  svg += '</svg>';
+  document.getElementById('hmWrap').innerHTML = svg;
+}
+setHM('rockyou');
+
+const attacks = ['rockyou + best64','rockyou + d3ad0ne','hibp + unicorn','comb + dive','?a?a?a?a?a?a','?u?l?l?l?l?d?d'];
+const jaccard = [[1.00,0.78,0.42,0.29,0.18,0.11],[0.78,1.00,0.48,0.31,0.22,0.14],[0.42,0.48,1.00,0.62,0.26,0.19],[0.29,0.31,0.62,1.00,0.27,0.21],[0.18,0.22,0.26,0.27,1.00,0.45],[0.11,0.14,0.19,0.21,0.45,1.00]];
+const setSizes = [190000, 167000, 142000, 118000, 95000, 73000];
+function renderJ() {
+  const a = +document.getElementById('aPick').value;
+  const b = +document.getElementById('bPick').value;
+  const j = jaccard[a][b];
+  const sizeA = setSizes[a], sizeB = setSizes[b];
+  const union_est = Math.round((sizeA + sizeB) / (1 + j));
+  const inter = Math.round(union_est * j);
+  const onlyA = sizeA - inter;
+  const onlyB = sizeB - inter;
+  const maxSingle = Math.max(sizeA, sizeB);
+  const gain = a === b ? 0 : Math.round(((union_est - maxSingle) / maxSingle) * 100);
+  const overlapPx = 80 + 80 - (1 - j) * 100;
+  document.getElementById('cA').setAttribute('cx', 160 - (160 - overlapPx) / 2 - 40);
+  document.getElementById('cB').setAttribute('cx', 160 + (160 - overlapPx) / 2 + 40);
+  document.getElementById('labA').setAttribute('x', 160 - (160 - overlapPx) / 2 - 90);
+  document.getElementById('labAn').setAttribute('x', 160 - (160 - overlapPx) / 2 - 90);
+  document.getElementById('labB').setAttribute('x', 160 + (160 - overlapPx) / 2 + 90);
+  document.getElementById('labBn').setAttribute('x', 160 + (160 - overlapPx) / 2 + 90);
+  document.getElementById('labA').textContent = a === b ? '\u2014' : 'A only';
+  document.getElementById('labAn').textContent = a === b ? '' : (onlyA/1000).toFixed(0)+'k';
+  document.getElementById('labOn').textContent = (inter/1000).toFixed(0)+'k';
+  document.getElementById('labB').textContent = a === b ? '\u2014' : 'B only';
+  document.getElementById('labBn').textContent = a === b ? '' : (onlyB/1000).toFixed(0)+'k';
+  document.getElementById('jacc').textContent = j.toFixed(2);
+  document.getElementById('gain').textContent = (gain >= 0 ? '+' : '') + gain + '%';
+  const v = document.getElementById('verdict');
+  const vt = document.getElementById('verdictTitle');
+  const vb = document.getElementById('verdictBody');
+  if (a === b) {
+    v.style.borderColor = 'var(--border)'; v.style.background = 'transparent';
+    vt.style.color = 'var(--text)';
+    vt.textContent = 'Same attack';
+    vb.textContent = 'Pick two different attacks to see overlap.';
+  } else if (j >= 0.6) {
+    v.style.borderColor = '#A32D2D'; v.style.background = 'var(--danger-bg)';
+    vt.style.color = 'var(--danger-text)';
+    vt.textContent = 'Redundant \u2014 drop one';
+    vb.textContent = 'Most of B\u2019s catches duplicate A. The cheaper of the two suffices; the other only adds '+gain+'% over running A alone.';
+  } else if (j >= 0.3) {
+    v.style.borderColor = '#BA7517'; v.style.background = 'var(--warning-bg)';
+    vt.style.color = 'var(--warning-text)';
+    vt.textContent = 'Partial overlap';
+    vb.textContent = 'Some duplication, but B contributes '+gain+'% novel cracks. Worth keeping if budget allows.';
+  } else {
+    v.style.borderColor = '#0F6E56'; v.style.background = 'var(--success-bg)';
+    vt.style.color = 'var(--success-text)';
+    vt.textContent = 'Complementary \u2014 keep both';
+    vb.textContent = 'B finds mostly different passwords than A. Combining gives '+gain+'% more coverage.';
+  }
+}
+function renderJList() {
+  const pairs = [];
+  for (let i = 0; i < attacks.length; i++) {
+    for (let k = i+1; k < attacks.length; k++) {
+      pairs.push({a:i,b:k,j:jaccard[i][k]});
+    }
+  }
+  pairs.sort((x,y)=>y.j-x.j);
+  const list = document.getElementById('pairList');
+  list.innerHTML = pairs.map(p=>{
+    const color = p.j >= 0.6 ? '#A32D2D' : p.j >= 0.3 ? '#854F0B' : '#0F6E56';
+    return '<div style="display:flex; align-items:center; gap:8px; padding:6px 10px; background:var(--surface-2); border-radius:6px; cursor:pointer; font-size:12px;" onclick="document.getElementById(\'aPick\').value='+p.a+';document.getElementById(\'bPick\').value='+p.b+';renderJ()">'
+      +'<span style="width:42px; color:'+color+'; font-weight:500;">'+p.j.toFixed(2)+'</span>'
+      +'<span style="flex:1;">'+attacks[p.a]+' &nbsp;\u00b7&nbsp; '+attacks[p.b]+'</span>'
+      +'</div>';
+  }).join('');
+}
+document.getElementById('aPick').addEventListener('change', renderJ);
+document.getElementById('bPick').addEventListener('change', renderJ);
+renderJ();
+renderJList();
+</script>
+</body>
+</html>

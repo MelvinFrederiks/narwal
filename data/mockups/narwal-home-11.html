@@ -1,0 +1,404 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>Narwal — home (v11 · rainbow hero)</title>
+  <style>
+    /* ── Theme tokens (mirror of web/index.html) ─────────────────────── */
+    :root, :root[data-theme="light"] {
+      --bg: #fafaf7;
+      --surface: #ffffff;
+      --surface-2: #f4f3ee;
+      --surface-3: #ebe9e1;
+      --border: rgba(0,0,0,0.12);
+      --border-2: rgba(0,0,0,0.2);
+      --text: #2C2C2A;
+      --text-secondary: #5F5E5A;
+      --text-tertiary: #888780;
+      --info-bg: #E6F1FB; --info-text: #0C447C; --info-border: #185FA5;
+      --success-bg: #EAF3DE; --success-text: #27500A; --success-border: #0F6E56;
+      --warning-bg: #FAEEDA; --warning-text: #633806; --warning-border: #BA7517;
+      --radius-md: 8px;
+      --radius-lg: 12px;
+      --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
+      --shadow-md: 0 8px 24px rgba(0,0,0,0.08);
+    }
+    :root[data-theme="dark"] {
+      --bg: #1a1a18;
+      --surface: #25241f;
+      --surface-2: #2f2e29;
+      --surface-3: #383631;
+      --border: rgba(255,255,255,0.12);
+      --border-2: rgba(255,255,255,0.2);
+      --text: #e8e6dd;
+      --text-secondary: #b4b2a9;
+      --text-tertiary: #888780;
+      --info-bg: #042C53; --info-text: #B5D4F4; --info-border: #185FA5;
+      --success-bg: #173404; --success-text: #C0DD97; --success-border: #0F6E56;
+      --warning-bg: #412402; --warning-text: #FAC775; --warning-border: #BA7517;
+      --shadow-sm: 0 1px 2px rgba(0,0,0,0.4);
+      --shadow-md: 0 8px 28px rgba(0,0,0,0.55);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root:not([data-theme="light"]) {
+        --bg: #1a1a18;
+        --surface: #25241f;
+        --surface-2: #2f2e29;
+        --surface-3: #383631;
+        --border: rgba(255,255,255,0.12);
+        --border-2: rgba(255,255,255,0.2);
+        --text: #e8e6dd;
+        --text-secondary: #b4b2a9;
+        --text-tertiary: #888780;
+        --info-bg: #042C53; --info-text: #B5D4F4; --info-border: #185FA5;
+        --success-bg: #173404; --success-text: #C0DD97; --success-border: #0F6E56;
+        --warning-bg: #412402; --warning-text: #FAC775; --warning-border: #BA7517;
+        --shadow-sm: 0 1px 2px rgba(0,0,0,0.4);
+        --shadow-md: 0 8px 28px rgba(0,0,0,0.55);
+      }
+    }
+
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body {
+      font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    /* ── Nav stand-in (so the mockup feels like the real page) ───────── */
+    nav {
+      display: flex; align-items: center; gap: 4px;
+      padding: 6px 24px; min-height: 56px;
+      border-bottom: 0.5px solid var(--border);
+      background: var(--surface);
+    }
+    nav a {
+      color: var(--text-secondary); text-decoration: none;
+      padding: 6px 14px; border-radius: var(--radius-md); font-size: 13px;
+    }
+    nav a.active { background: var(--surface-3); color: var(--text); font-weight: 500; }
+    nav .right { margin-left: auto; color: var(--text-tertiary); font-size: 12px; }
+
+    main { padding: 24px; max-width: 1200px; margin: 0 auto; }
+
+    /* ── Hero (clean, left-aligned, full width) ──────────────────────── */
+    .hero {
+      background: var(--surface);
+      border: 0.5px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 36px 36px 28px;
+      margin-bottom: 16px;
+      box-shadow: var(--shadow-sm);
+    }
+    .hero h1 {
+      font-size: 36px; font-weight: 600; letter-spacing: -0.4px;
+      line-height: 1.08; margin: 0 0 8px;
+      /* Full-rainbow gradient across the entire headline (echoes the
+         narwhal mascot's hair). Same stops top/bottom so the gradient
+         doesn't shift if the headline wraps. */
+      background: linear-gradient(90deg,
+        #ff77c6 0%,
+        #ff6b6b 16%,
+        #ffb077 32%,
+        #ffd96a 48%,
+        #87e57a 64%,
+        #4dc6e8 80%,
+        #b76ce0 100%);
+      background-size: 100% 100%;
+      -webkit-background-clip: text; background-clip: text;
+      color: transparent;
+    }
+    .hero .tagline {
+      color: var(--text-secondary); font-size: 16px; line-height: 1.55;
+      margin: 0 0 22px; max-width: 720px;
+    }
+    .hero .tagline strong { color: var(--text); font-weight: 600; }
+
+    .hero-stats {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px;
+      margin-top: 8px; margin-bottom: 24px;
+    }
+    .stat {
+      padding: 14px 16px;
+      background: var(--surface-2);
+      border: 0.5px solid var(--surface-3);
+      border-radius: var(--radius-md);
+    }
+    .stat .stat-val {
+      font-size: 22px; font-weight: 600; line-height: 1.1;
+      font-variant-numeric: tabular-nums;
+    }
+    .stat .stat-val .unit {
+      font-size: 12px; color: var(--text-secondary); font-weight: 500; margin-left: 4px;
+    }
+    .stat .stat-label {
+      font-size: 11px; letter-spacing: 0.5px;
+      text-transform: uppercase; color: var(--text-tertiary);
+      margin-top: 4px;
+    }
+    .stat.savings .stat-val { color: var(--success-text); }
+    .stat.stickers .stat-val { color: var(--warning-text); }
+
+    .cta-row { display: flex; gap: 10px; flex-wrap: wrap; }
+    .cta {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 10px 18px;
+      border-radius: var(--radius-md); text-decoration: none;
+      font-weight: 500; font-size: 14px;
+      border: 1px solid var(--surface-3); color: var(--text); background: var(--surface);
+    }
+    .cta.primary {
+      background: var(--info-bg); color: var(--info-text); border-color: var(--info-border);
+    }
+    .cta:hover { background: var(--surface-2); }
+    .cta.primary:hover { filter: brightness(0.95); }
+    .cta svg { width: 14px; height: 14px; }
+
+    /* ── Clarify card (now its own row, full-width, lower-key) ───────── */
+    .clarify-row {
+      display: grid; grid-template-columns: 1fr; gap: 14px;
+      margin-bottom: 18px;
+    }
+    .clarify-card {
+      background: var(--info-bg); border: 1px solid var(--info-border);
+      color: var(--info-text); padding: 14px 18px;
+      border-radius: var(--radius-md);
+      font-size: 13px; line-height: 1.55;
+      display: flex; gap: 14px; align-items: flex-start;
+    }
+    .clarify-card .clarify-ico {
+      flex: 0 0 28px; width: 28px; height: 28px;
+      border-radius: 50%;
+      background: var(--info-border); color: white;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 14px;
+    }
+    .clarify-card .clarify-body { flex: 1; }
+    .clarify-card strong { font-weight: 600; }
+
+    /* ── Storyboard grid (unchanged — user said keep this) ──────────── */
+    .grid-section h2 {
+      font-size: 13px; font-weight: 500;
+      letter-spacing: 0.4px; text-transform: uppercase;
+      color: var(--text-tertiary); margin: 8px 4px 12px;
+    }
+    .home-grid {
+      display: grid; gap: 14px;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    }
+    .home-card {
+      background: var(--surface); border: 0.5px solid var(--border);
+      border-radius: var(--radius-md); padding: 14px 16px;
+      display: flex; gap: 12px;
+      text-decoration: none; color: var(--text);
+      transition: transform 0.1s ease, border-color 0.1s ease;
+    }
+    .home-card:hover { transform: translateY(-1px); border-color: var(--info-border); }
+    .home-ico {
+      width: 36px; height: 36px; border-radius: 50%;
+      background: linear-gradient(180deg, #e4eef9, #d3e3f4);
+      display: flex; align-items: center; justify-content: center;
+      flex: 0 0 36px; color: var(--info-text);
+    }
+    :root[data-theme="dark"] .home-ico,
+    :root:not([data-theme="light"]) .home-ico {
+      background: linear-gradient(180deg, #1b2a3a, #15202c);
+    }
+    @media (prefers-color-scheme: light) {
+      :root:not([data-theme="dark"]) .home-ico {
+        background: linear-gradient(180deg, #e4eef9, #d3e3f4);
+      }
+    }
+    .home-ico svg { width: 20px; height: 20px; }
+    .home-card-title {
+      font-weight: 500; font-size: 14px; margin-bottom: 4px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .home-card-body { font-size: 12px; color: var(--text-secondary); line-height: 1.5; }
+    .home-card-reward {
+      font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 999px;
+      letter-spacing: 0.3px; text-transform: uppercase;
+      background: rgba(255,217,106,0.18);
+      color: #BA7517;
+      border: 1px solid rgba(186,117,23,0.35);
+    }
+    :root[data-theme="dark"] .home-card-reward,
+    :root:not([data-theme="light"]) .home-card-reward {
+      background: rgba(255,217,106,0.10);
+      color: #FAC775;
+      border: 1px solid rgba(255,217,106,0.30);
+    }
+
+    /* ── Methodology refs ────────────────────────────────────────────── */
+    .refs {
+      margin-top: 22px;
+      padding: 16px 18px;
+      background: var(--surface);
+      border: 0.5px solid var(--border);
+      border-radius: var(--radius-md);
+      color: var(--text-secondary); font-size: 12px; line-height: 1.6;
+    }
+    .refs h3 { margin: 0 0 8px; color: var(--text); font-size: 13px; font-weight: 500; }
+    .refs ul { margin: 0; padding-left: 18px; }
+    .refs strong { color: var(--text); }
+
+    @media (max-width: 820px) {
+      .hero { padding: 24px 22px; }
+      .hero h1 { font-size: 28px; }
+      .hero-stats { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <nav>
+    <a class="active">Home</a><a>Setup</a><a>Coverage</a><a>Compare</a>
+    <a>Heatmap</a><a>Overlap · pair</a><a>Overlap · network</a><a>Cluster</a>
+    <a>Composer</a><a>Verdict</a><a>Architecture</a>
+    <span class="right">theme · stickers · 🦄</span>
+  </nav>
+
+  <main>
+    <!-- ── Hero ────────────────────────────────────────────────────── -->
+    <section class="hero">
+      <h1>Plan the attack. Save the polar bears.</h1>
+      <p class="tagline">
+        Narwal turns brute GPU-hours into ranked, deduplicated attack chains.
+        Every redundant attack you skip saves real <strong>energy</strong> —
+        your cluster eats <strong>3.6 kW</strong> when it's hashing.
+        Narwal plans; <strong>Hashtopolis cracks</strong>.
+      </p>
+
+      <div class="hero-stats">
+        <div class="stat savings">
+          <div class="stat-val">14.2<span class="unit">household-days</span></div>
+          <div class="stat-label">saved · this quarter</div>
+        </div>
+        <div class="stat stickers">
+          <div class="stat-val">9<span class="unit">/ ∞</span></div>
+          <div class="stat-label">stickers · keep cracking</div>
+        </div>
+        <div class="stat">
+          <div class="stat-val">71<span class="unit">%</span></div>
+          <div class="stat-label">step 10 · in progress</div>
+        </div>
+      </div>
+
+      <div class="cta-row">
+        <a class="cta primary" href="#setup">
+          Start with Setup
+          <svg viewBox="0 0 12 12" aria-hidden="true"><path d="M3 6h6m-3-3l3 3-3 3" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+        </a>
+        <a class="cta" href="#architecture">See the architecture</a>
+      </div>
+    </section>
+
+    <!-- Clarify-card moved → Architecture scene. Home stays focused on
+         "what this is + what's next". -->
+
+    <!-- ── Storyboard step cards (preserved as-is) ─────────────────── -->
+    <section class="grid-section">
+      <h2>Workflow · 9 steps</h2>
+      <div class="home-grid">
+        <a class="home-card" href="#setup">
+          <div class="home-ico">{{iconCheckList}}</div>
+          <div>
+            <div class="home-card-title">1 · Setup</div>
+            <div class="home-card-body">Pick reference corpora, drop a target hashlist, and choose a cluster spec. Selections persist across scenes.</div>
+          </div>
+        </a>
+        <a class="home-card" href="#coverage">
+          <div class="home-ico">{{iconChartBars}}</div>
+          <div>
+            <div class="home-card-title">2 · Coverage</div>
+            <div class="home-card-body">Cumulative mask coverage per Van Heijningen 2013, fig. O.2. The budget kink marks where adding more masks stops paying.</div>
+          </div>
+        </a>
+        <a class="home-card" href="#compare">
+          <div class="home-ico">{{iconChartLines}}</div>
+          <div>
+            <div class="home-card-title">3 · Compare</div>
+            <div class="home-card-body">All selected datasets on locked axes. Reveals cross-cultural distribution differences (MAYA §4.2).</div>
+          </div>
+        </a>
+        <a class="home-card" href="#heatmap">
+          <div class="home-ico">{{iconGrid}}</div>
+          <div>
+            <div class="home-card-title">4 · Heatmap</div>
+            <div class="home-card-body">Per-position character frequency. Vowels-early = natural-language; digit dominance = PIN-style; shifted shapes hint at Cyrillic input.</div>
+          </div>
+        </a>
+        <a class="home-card" href="#overlap-2">
+          <div class="home-ico">{{iconVenn}}</div>
+          <div>
+            <div class="home-card-title">5 · Overlap · pair</div>
+            <div class="home-card-body">Drag any two attacks into the slots. Venn + verdict update live — red = redundant, amber = partial, green = complementary.</div>
+          </div>
+        </a>
+        <a class="home-card" href="#overlap-many">
+          <div class="home-ico">{{iconNetwork}}</div>
+          <div>
+            <div class="home-card-title">5b · Overlap · network</div>
+            <div class="home-card-body">All attacks at once as a force-directed graph. Spring length ∝ 1 − Jaccard so redundant attacks cluster; thick edges = high overlap.</div>
+          </div>
+        </a>
+        <a class="home-card" href="#cluster">
+          <div class="home-ico">{{iconScatter}}</div>
+          <div>
+            <div class="home-card-title">6 · Cluster</div>
+            <div class="home-card-body">UMAP projection of dataset feature vectors into three regions — consumer leaks, corporate, high-entropy.</div>
+          </div>
+        </a>
+        <a class="home-card" href="#compose">
+          <div class="home-ico">{{iconStack}}</div>
+          <div>
+            <div class="home-card-title">7 · Compose <span class="home-card-reward">+1 sticker</span></div>
+            <div class="home-card-body">Now that you understand the data, build a pipeline: click attacks from the library. Per-step residual yield and budget meter update live.</div>
+          </div>
+        </a>
+        <a class="home-card" href="#verdict">
+          <div class="home-ico">{{iconCheckSeal}}</div>
+          <div>
+            <div class="home-card-title">8 · Verdict <span class="home-card-reward">+1 sticker</span></div>
+            <div class="home-card-body">Strongest / weakest reference + a ranked attack chain. One-click export to a Hashtopolis v2 supertask JSON (preview only).</div>
+          </div>
+        </a>
+        <a class="home-card" href="#architecture">
+          <div class="home-ico">{{iconBlueprint}}</div>
+          <div>
+            <div class="home-card-title">9 · Architecture</div>
+            <div class="home-card-body">How the sidecar fits next to Hashtopolis. Bridge is preview-only — Narwal plans, Hashtopolis executes.</div>
+          </div>
+        </a>
+      </div>
+    </section>
+
+    <div class="refs">
+      <h3>Methodology anchors</h3>
+      <ul>
+        <li><strong>Van Heijningen 2013</strong> — Appendix O.2 cumulative-mask curve and per-position frequency heatmaps. Row 25 (?l×8 ?d×2) = 67.19 % cumulative coverage.</li>
+        <li><strong>MAYA / Corrias et al. 2026</strong> — Table 2 dataset set (8 leaks), cleaning conventions via demeuk, cross-cultural distribution findings.</li>
+        <li><strong>Norvig / Mayzner 2012</strong> — English letter-frequency reference for the natural-language baseline in the heatmap.</li>
+      </ul>
+    </div>
+  </main>
+
+  <script>
+    // Inline icons (24×24, currentColor strokes). Kept here in the mockup;
+    // in the live app these are SVGs exported per step in scenes/home.js.
+    const ICONS = {
+      iconCheckList: `<svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2" stroke="currentColor" stroke-width="1.6" fill="none"/><path d="M8 8h8M8 12h8M8 16h5" stroke="currentColor" stroke-width="1.6"/><path d="M15 16l1.4 1.4L19 14.6" stroke="currentColor" stroke-width="1.6" fill="none"/></svg>`,
+      iconChartBars: `<svg viewBox="0 0 24 24"><path d="M4 21V3M4 21h16" stroke="currentColor" stroke-width="1.6"/><rect x="7" y="14" width="2.6" height="6" stroke="currentColor" stroke-width="1.4" fill="none"/><rect x="11" y="10" width="2.6" height="10" stroke="currentColor" stroke-width="1.4" fill="none"/><rect x="15" y="6" width="2.6" height="14" stroke="currentColor" stroke-width="1.4" fill="none"/></svg>`,
+      iconChartLines: `<svg viewBox="0 0 24 24"><path d="M4 21V3M4 21h16" stroke="currentColor" stroke-width="1.6"/><path d="M5 17l4-5 4 2 6-7" stroke="currentColor" stroke-width="1.6" fill="none"/></svg>`,
+      iconGrid: `<svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="1" stroke="currentColor" stroke-width="1.6" fill="none"/><path d="M9 3v18M15 3v18M3 9h18M3 15h18" stroke="currentColor" stroke-width="1.2"/><rect x="9" y="9" width="6" height="6" fill="currentColor" opacity="0.25"/></svg>`,
+      iconVenn: `<svg viewBox="0 0 24 24"><circle cx="10" cy="12" r="6" stroke="currentColor" stroke-width="1.6" fill="none"/><circle cx="14" cy="12" r="6" stroke="currentColor" stroke-width="1.6" fill="none"/></svg>`,
+      iconNetwork: `<svg viewBox="0 0 24 24"><circle cx="5" cy="6" r="2" stroke="currentColor" stroke-width="1.4" fill="none"/><circle cx="19" cy="6" r="2" stroke="currentColor" stroke-width="1.4" fill="none"/><circle cx="12" cy="13" r="2" stroke="currentColor" stroke-width="1.4" fill="none"/><circle cx="6" cy="19" r="2" stroke="currentColor" stroke-width="1.4" fill="none"/><circle cx="18" cy="19" r="2" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M6.4 7.4l4.6 4.6M17.6 7.4L13 12M11.2 14.3L7.3 17.6M12.8 14.3L17 17.6" stroke="currentColor" stroke-width="1.2" fill="none"/></svg>`,
+      iconScatter: `<svg viewBox="0 0 24 24"><path d="M4 21V3M4 21h16" stroke="currentColor" stroke-width="1.6"/><circle cx="8" cy="15" r="1.5" fill="currentColor"/><circle cx="11" cy="10" r="2" fill="currentColor"/><circle cx="16" cy="13" r="1.2" fill="currentColor"/><circle cx="18" cy="7" r="1.6" fill="currentColor"/></svg>`,
+      iconStack: `<svg viewBox="0 0 24 24"><path d="M12 3 3 8l9 5 9-5-9-5z" stroke="currentColor" stroke-width="1.6" fill="none"/><path d="M3 13l9 5 9-5" stroke="currentColor" stroke-width="1.6" fill="none"/><path d="M3 17l9 5 9-5" stroke="currentColor" stroke-width="1.6" fill="none"/></svg>`,
+      iconCheckSeal: `<svg viewBox="0 0 24 24"><path d="M12 2l2.5 1.5L17 3l1 2.5L20.5 7 20 10l1.5 2.5L20 15l.5 3-2.5 1L17 21l-2.5-1L12 22l-2.5-2L7 21l-1-2L3.5 18 4 15l-1.5-2.5L4 10l-.5-3L6 5.5 7 3l2.5.5L12 2z" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M8.5 12l2.5 2.5L16 9.5" stroke="currentColor" stroke-width="1.8" fill="none"/></svg>`,
+      iconBlueprint: `<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="1.5" stroke="currentColor" stroke-width="1.6" fill="none"/><path d="M3 8h18M7 12h6M7 16h10" stroke="currentColor" stroke-width="1.4"/><circle cx="17" cy="12" r="1.5" stroke="currentColor" stroke-width="1.4" fill="none"/></svg>`,
+    };
+    document.body.innerHTML = document.body.innerHTML.replace(/\{\{(\w+)\}\}/g, (_, k) => ICONS[k] || "");
+  </script>
+</body>
+</html>

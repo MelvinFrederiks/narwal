@@ -1,0 +1,318 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>Crackalyzer — Narwal home</title>
+  <link rel="stylesheet" href="_polar.css"/>
+  <style>
+    header { gap: 12px; }
+    /* Mini avatar in header — uses the logo via background-image so it
+       drops into the existing chip slot without rebuilding the layout. */
+    header .mascot-sm {
+      width: 36px; height: 36px; border-radius: 50%;
+      background: #d6ecf6 url("../../logo-narwal.png") no-repeat center;
+      background-size: 86%;
+      border: 1px solid var(--border);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+      animation: header-bob 3.4s ease-in-out infinite;
+    }
+    @keyframes header-bob {
+      0%, 100% { transform: translateY(0) rotate(-3deg); }
+      50%      { transform: translateY(-2px) rotate(3deg); }
+    }
+    header h1 { margin: 0; font-size: 18px; font-weight: 600; }
+    header .meter {
+      margin-left: auto; display: flex; align-items: center; gap: 8px;
+      font-size: 12px; color: var(--text-secondary);
+    }
+    header .meter .pill {
+      background: var(--success-bg); color: var(--success-text);
+      padding: 3px 12px; border-radius: 14px; font-weight: 500;
+    }
+
+    .hero {
+      display: grid; grid-template-columns: 1fr 400px; gap: 26px;
+      align-items: stretch;
+    }
+    .hero-text h1 {
+      font-size: 34px; font-weight: 700; margin: 4px 0 8px;
+      letter-spacing: -0.4px; color: var(--text);
+    }
+    .hero-text .lead {
+      color: var(--text-secondary); font-size: 14px; line-height: 1.55;
+      max-width: 560px;
+    }
+    .hero-text .lead strong { color: var(--text); }
+    .clarify-card {
+      background: var(--info-bg); border: 1px solid var(--info-border);
+      color: var(--info-text); padding: 12px 14px; border-radius: 8px;
+      margin-top: 14px; font-size: 13px; line-height: 1.5;
+      max-width: 560px;
+    }
+    .clarify-card .unit-label {
+      font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
+      font-size: 11px; margin-bottom: 4px;
+    }
+
+    .cta-row { display: flex; gap: 10px; margin-top: 18px; }
+    .cta {
+      display: inline-block; padding: 10px 18px;
+      border-radius: 8px; text-decoration: none; font-weight: 500; font-size: 14px;
+      border: 1px solid var(--surface-3); color: var(--text); background: var(--surface);
+    }
+    .cta.primary {
+      background: var(--info-bg); color: var(--info-text); border-color: var(--info-border);
+    }
+
+    /* ── Scoreboard / animated mascot ─────────────────────────────────── */
+    .scoreboard {
+      background:
+        linear-gradient(180deg, #f4fbff 0%, #dff0fb 40%, #b2dbf5 80%, #87c6f0 100%);
+      border-radius: var(--radius-lg); border: 0.5px solid var(--border);
+      padding: 22px 22px 18px; box-shadow: var(--shadow-md);
+      position: relative; overflow: hidden;
+      display: flex; flex-direction: column; align-items: center; text-align: center;
+    }
+
+    /* Layered ocean: wavy surface line + a few wave bumps below it. */
+    .scoreboard .water {
+      position: absolute; left: 0; right: 0; bottom: 0; height: 64%;
+      background:
+        radial-gradient(ellipse 70% 36% at 10% 20%, rgba(255,255,255,0.55), transparent 60%),
+        radial-gradient(ellipse 80% 40% at 80% 30%, rgba(255,255,255,0.35), transparent 60%),
+        linear-gradient(180deg, rgba(135,198,240,0.0), rgba(56,128,180,0.4));
+      pointer-events: none;
+    }
+    .scoreboard .wave {
+      position: absolute; left: -10%; right: -10%; height: 14px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.4);
+      animation: wave-bob 5s ease-in-out infinite;
+    }
+    .scoreboard .wave.w1 { top: 36%; height: 8px; background: rgba(255,255,255,0.55); }
+    .scoreboard .wave.w2 { top: 49%; height: 12px; background: rgba(255,255,255,0.30); animation-duration: 6.2s; animation-delay: -1.4s; }
+    .scoreboard .wave.w3 { top: 62%; height: 10px; background: rgba(255,255,255,0.22); animation-duration: 4.4s; animation-delay: -2.6s; }
+    @keyframes wave-bob {
+      0%, 100% { transform: translateX(-10px) scaleY(1); }
+      50%      { transform: translateX(10px)  scaleY(0.85); }
+    }
+
+    /* Rising bubbles — eight, staggered. */
+    .scoreboard .bubble {
+      position: absolute; width: 8px; height: 8px;
+      background: rgba(255,255,255,0.7);
+      border: 1px solid rgba(255,255,255,0.9);
+      border-radius: 50%;
+      bottom: -20px;
+      animation: bubble-rise 5s linear infinite;
+      filter: blur(0.2px);
+    }
+    @keyframes bubble-rise {
+      0%   { transform: translate(0, 0) scale(0.7); opacity: 0; }
+      8%   { opacity: 0.9; }
+      90%  { opacity: 0.9; }
+      100% { transform: translate(20px, -260px) scale(1.1); opacity: 0; }
+    }
+    .scoreboard .bubble.b1 { left: 10%; width: 6px; height: 6px; animation-duration: 6.0s; animation-delay: -0.3s; }
+    .scoreboard .bubble.b2 { left: 18%; width: 10px; height: 10px; animation-duration: 4.8s; animation-delay: -1.6s; }
+    .scoreboard .bubble.b3 { left: 30%; width: 5px; height: 5px;  animation-duration: 5.3s; animation-delay: -3.2s; }
+    .scoreboard .bubble.b4 { left: 70%; width: 7px; height: 7px;  animation-duration: 5.6s; animation-delay: -2.0s; }
+    .scoreboard .bubble.b5 { left: 80%; width: 9px; height: 9px;  animation-duration: 6.5s; animation-delay: -0.7s; }
+    .scoreboard .bubble.b6 { left: 88%; width: 5px; height: 5px;  animation-duration: 4.6s; animation-delay: -3.8s; }
+    .scoreboard .bubble.b7 { left: 50%; width: 6px; height: 6px;  animation-duration: 5.0s; animation-delay: -4.4s; }
+    .scoreboard .bubble.b8 { left: 60%; width: 8px; height: 8px;  animation-duration: 5.8s; animation-delay: -1.1s; }
+
+    /* Sparkle field around the horn. */
+    .scoreboard .sparkle {
+      position: absolute; width: 6px; height: 6px;
+      background:
+        radial-gradient(circle, #ffffff 0%, #ffffff 30%, transparent 70%);
+      border-radius: 50%;
+      animation: sparkle 2.4s ease-in-out infinite;
+    }
+    @keyframes sparkle {
+      0%, 100% { opacity: 0; transform: scale(0.4); }
+      50%      { opacity: 1; transform: scale(1.3); }
+    }
+    .scoreboard .sparkle.s1 { left: 38%; top: 30px;  animation-delay: 0s; }
+    .scoreboard .sparkle.s2 { left: 56%; top: 18px;  animation-delay: -0.5s; }
+    .scoreboard .sparkle.s3 { left: 64%; top: 38px;  animation-delay: -0.9s; }
+    .scoreboard .sparkle.s4 { left: 32%; top: 56px;  animation-delay: -1.4s; }
+    .scoreboard .sparkle.s5 { left: 70%; top: 60px;  animation-delay: -1.8s; }
+    .scoreboard .sparkle.s6 { left: 48%; top: 4px;   animation-delay: -2.1s; }
+
+    /* The mascot itself — gentle bob + tail-wag rotate. */
+    .scoreboard .mascot {
+      width: 240px; height: 240px;
+      background-image: url("../../logo-narwal.png");
+      background-size: contain; background-repeat: no-repeat; background-position: center;
+      filter: drop-shadow(0 8px 18px rgba(44, 92, 132, 0.4));
+      animation: swim 4.4s ease-in-out infinite;
+      transform-origin: 35% 60%;
+      position: relative; z-index: 2;
+      margin-bottom: 6px;
+    }
+    @keyframes swim {
+      0%, 100% { transform: translateY(0px) rotate(-3deg); }
+      30%      { transform: translateY(-8px) rotate(1deg); }
+      50%      { transform: translateY(-10px) rotate(4deg); }
+      70%      { transform: translateY(-6px) rotate(2deg); }
+    }
+
+    /* Foreground text sits above the water layers. */
+    .scoreboard .name,
+    .scoreboard .label,
+    .scoreboard .big,
+    .scoreboard .progress,
+    .scoreboard .floor { position: relative; z-index: 2; }
+
+    .scoreboard .name {
+      font-weight: 600; font-size: 14px; color: var(--text);
+      letter-spacing: 0.3px;
+    }
+    .scoreboard .name .light { color: var(--text-secondary); font-weight: 400; }
+    .scoreboard .label {
+      font-size: 11px; letter-spacing: 1.2px; text-transform: uppercase;
+      color: var(--text-secondary); font-weight: 500; margin-top: 12px;
+    }
+    .scoreboard .big {
+      font-size: 56px; font-weight: 700; line-height: 1.05; color: var(--text);
+      font-variant-numeric: tabular-nums; margin: 4px 0 2px;
+    }
+    .scoreboard .unit { font-size: 16px; color: var(--text-secondary); font-weight: 500; }
+    .scoreboard .progress {
+      margin-top: 16px; width: 100%; height: 8px;
+      background: #ffffff; border-radius: 5px; overflow: hidden;
+    }
+    .scoreboard .progress > i {
+      display: block; height: 100%;
+      background: linear-gradient(90deg, #ff77c6 0%, #ffb077 40%, #ffd96a 70%, #87e57a 100%);
+      width: 71%;
+      animation: fill-grow 6s ease-out infinite alternate;
+    }
+    @keyframes fill-grow {
+      from { width: 64%; } to { width: 74%; }
+    }
+    .scoreboard .floor {
+      margin-top: 8px; width: 100%;
+      display: flex; justify-content: space-between;
+      font-size: 11px; color: var(--text-secondary);
+    }
+
+    /* ── Workflow cards (unchanged structure, household-days copy) ────── */
+    .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 22px; }
+    .grid .card {
+      background: var(--surface-2); border: 0.5px solid var(--surface-3);
+      border-radius: var(--radius-md); padding: 14px 16px; display: flex; gap: 12px;
+    }
+    .grid .ico {
+      width: 36px; height: 36px; border-radius: 50%;
+      background: linear-gradient(180deg, #eaf6fc, #c4e3f5);
+      display: flex; align-items: center; justify-content: center;
+      flex: 0 0 36px; font-size: 18px;
+    }
+    .grid .body .title { font-weight: 500; font-size: 14px; margin-bottom: 2px; }
+    .grid .body .desc { font-size: 12px; color: var(--text-secondary); line-height: 1.5; }
+    .grid .save {
+      margin-top: 6px; font-size: 11px; color: var(--success-text); font-weight: 500;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="mascot-sm" aria-hidden="true"></div>
+    <h1>Crackalyzer</h1>
+    <span class="tagline">pre-attack password planner — Hashtopolis sidecar</span>
+    <span class="meter">
+      this week: <span class="pill">+0.7 household-days saved</span>
+    </span>
+  </header>
+  <nav>
+    <a class="active">Home</a><a>Setup</a><a>Composer</a><a>Coverage</a>
+    <a>Compare</a><a>Heatmap</a><a>Overlap</a><a>Cluster</a><a>Verdict</a><a>Architecture</a>
+  </nav>
+  <main>
+    <div class="panel">
+      <div class="hero">
+        <div class="hero-text">
+          <div class="pill pill-info" style="margin-bottom: 6px">plan-only · Hashtopolis cracks</div>
+          <h1>Crack smart. Save bears.</h1>
+          <p class="lead">
+            Cracking is greedy — your 8× RTX 4090 cluster eats <strong>3.6 kW</strong>
+            when it's hashing. Crackalyzer turns brute GPU-hours into ranked,
+            deduplicated attack chains. Every chain you skip saves real grid power.
+          </p>
+
+          <div class="clarify-card">
+            <div class="unit-label">how we report savings — one number, one unit</div>
+            We translate every plan into <strong>household-days</strong>:
+            the electricity an average Dutch home consumes in 24 hours (~10 kWh).
+            One full day on the cluster ≈ <strong>9 household-days</strong>.
+            A clever 2-hour plan can save <strong>~0.7 household-days</strong>.
+          </div>
+
+          <div class="cta-row">
+            <a class="cta primary" href="#">Start with Setup →</a>
+            <a class="cta" href="#">See the architecture</a>
+          </div>
+        </div>
+
+        <div class="scoreboard">
+          <div class="water" aria-hidden="true"></div>
+          <div class="wave w1" aria-hidden="true"></div>
+          <div class="wave w2" aria-hidden="true"></div>
+          <div class="wave w3" aria-hidden="true"></div>
+          <div class="bubble b1" aria-hidden="true"></div>
+          <div class="bubble b2" aria-hidden="true"></div>
+          <div class="bubble b3" aria-hidden="true"></div>
+          <div class="bubble b4" aria-hidden="true"></div>
+          <div class="bubble b5" aria-hidden="true"></div>
+          <div class="bubble b6" aria-hidden="true"></div>
+          <div class="bubble b7" aria-hidden="true"></div>
+          <div class="bubble b8" aria-hidden="true"></div>
+          <div class="sparkle s1" aria-hidden="true"></div>
+          <div class="sparkle s2" aria-hidden="true"></div>
+          <div class="sparkle s3" aria-hidden="true"></div>
+          <div class="sparkle s4" aria-hidden="true"></div>
+          <div class="sparkle s5" aria-hidden="true"></div>
+          <div class="sparkle s6" aria-hidden="true"></div>
+
+          <div class="mascot" aria-hidden="true"></div>
+          <div class="name">Narwal <span class="light">· your planning mascot</span></div>
+          <div class="label">household-days saved this quarter</div>
+          <div class="big">14.2<span class="unit"> hh-days</span></div>
+          <div class="progress"><i></i></div>
+          <div class="floor"><span>0</span><span>71 %</span><span>20 hh-days · 🏆 polar bear</span></div>
+        </div>
+      </div>
+
+      <div class="grid">
+        <div class="card">
+          <div class="ico">📊</div>
+          <div class="body">
+            <div class="title">Coverage</div>
+            <div class="desc">find the budget kink — where new masks cost more than they crack.</div>
+            <div class="save">last run: 0.4 household-days saved</div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="ico">🧩</div>
+          <div class="body">
+            <div class="title">Composer</div>
+            <div class="desc">build a ranked, deduplicated attack chain by clicking.</div>
+            <div class="save">last run: 0.2 household-days saved</div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="ico">⚖️</div>
+          <div class="body">
+            <div class="title">Verdict</div>
+            <div class="desc">grade your plan vs. brute force; household-days saved.</div>
+            <div class="save">last run: 1.8 household-days saved</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+</body>
+</html>

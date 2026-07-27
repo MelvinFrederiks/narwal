@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>Crackalyzer — polar-unicorn home</title>
+  <link rel="stylesheet" href="_polar.css"/>
+  <style>
+    header { gap: 12px; }
+    header .mascot-sm {
+      width: 36px; height: 36px; border-radius: 50%;
+      background-image: url("../../logo-polar-unicorn.png");
+      background-size: cover; background-position: center;
+      border: 1px solid var(--border);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+    }
+    header h1 { margin: 0; font-size: 18px; font-weight: 600; }
+    header .meter {
+      margin-left: auto; display: flex; align-items: center; gap: 8px;
+      font-size: 12px; color: var(--text-secondary);
+    }
+    header .meter .pill {
+      background: var(--success-bg); color: var(--success-text);
+      padding: 3px 12px; border-radius: 14px; font-weight: 500;
+    }
+
+    .hero {
+      display: grid; grid-template-columns: 1fr 400px; gap: 26px;
+      align-items: stretch;
+    }
+    .hero-text h1 {
+      font-size: 34px; font-weight: 700; margin: 4px 0 8px;
+      letter-spacing: -0.4px; color: var(--text);
+    }
+    .hero-text .lead {
+      color: var(--text-secondary); font-size: 14px; line-height: 1.55;
+      max-width: 560px;
+    }
+    .hero-text .lead strong { color: var(--text); }
+    .clarify-card {
+      background: var(--info-bg); border: 1px solid var(--info-border);
+      color: var(--info-text); padding: 12px 14px; border-radius: 8px;
+      margin-top: 14px; font-size: 13px; line-height: 1.5;
+      max-width: 560px;
+    }
+    .clarify-card .unit-label {
+      font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
+      font-size: 11px; margin-bottom: 4px;
+    }
+
+    .cta-row { display: flex; gap: 10px; margin-top: 18px; }
+    .cta {
+      display: inline-block; padding: 10px 18px;
+      border-radius: 8px; text-decoration: none; font-weight: 500; font-size: 14px;
+      border: 1px solid var(--surface-3); color: var(--text); background: var(--surface);
+    }
+    .cta.primary {
+      background: var(--info-bg); color: var(--info-text); border-color: var(--info-border);
+    }
+
+    .scoreboard {
+      background:
+        radial-gradient(ellipse at center top, #fff4fc 0%, #d6ecf6 65%, #b9defa 100%);
+      border-radius: var(--radius-lg); border: 0.5px solid var(--border);
+      padding: 22px 22px 18px; box-shadow: var(--shadow-md);
+      position: relative; overflow: hidden;
+      display: flex; flex-direction: column; align-items: center; text-align: center;
+    }
+    .scoreboard::before {
+      content: ""; position: absolute; inset: 0;
+      background-image:
+        radial-gradient(circle at 18% 22%, #ffffff 0 1.5px, transparent 2px),
+        radial-gradient(circle at 82% 28%, #ffffff 0 1.2px, transparent 2px),
+        radial-gradient(circle at 50% 12%, #ffffff 0 1.4px, transparent 2px),
+        radial-gradient(circle at 26% 78%, #ffffff 0 1.1px, transparent 2px),
+        radial-gradient(circle at 74% 84%, #ffffff 0 1.3px, transparent 2px);
+      opacity: 0.7;
+      pointer-events: none;
+    }
+    .scoreboard .mascot {
+      width: 220px; height: 220px;
+      background-image: url("../../logo-polar-unicorn.png");
+      background-size: cover; background-position: center;
+      filter: drop-shadow(0 8px 20px rgba(96, 156, 196, 0.45));
+      margin-bottom: 6px;
+      animation: float 5s ease-in-out infinite;
+    }
+    @keyframes float {
+      0%, 100% { transform: translateY(0); }
+      50%      { transform: translateY(-6px); }
+    }
+    .scoreboard .name {
+      font-weight: 600; font-size: 14px; color: var(--text);
+      letter-spacing: 0.3px;
+    }
+    .scoreboard .name .light {
+      color: var(--text-secondary); font-weight: 400;
+    }
+    .scoreboard .label {
+      font-size: 11px; letter-spacing: 1.2px; text-transform: uppercase;
+      color: var(--text-secondary); font-weight: 500; margin-top: 12px;
+    }
+    .scoreboard .big {
+      font-size: 56px; font-weight: 700; line-height: 1.05; color: var(--text);
+      font-variant-numeric: tabular-nums; margin: 4px 0 2px;
+    }
+    .scoreboard .unit {
+      font-size: 16px; color: var(--text-secondary); font-weight: 500;
+    }
+    .scoreboard .progress {
+      margin-top: 16px; width: 100%; height: 8px;
+      background: #ffffff; border-radius: 5px; overflow: hidden;
+    }
+    .scoreboard .progress > i {
+      display: block; height: 100%;
+      background: linear-gradient(90deg, #ff77c6 0%, #ffb077 40%, #ffd96a 70%, #87e57a 100%);
+      width: 71%;
+    }
+    .scoreboard .floor {
+      margin-top: 8px; width: 100%;
+      display: flex; justify-content: space-between;
+      font-size: 11px; color: var(--text-secondary);
+    }
+
+    .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 22px; }
+    .grid .card {
+      background: var(--surface-2); border: 0.5px solid var(--surface-3);
+      border-radius: var(--radius-md); padding: 14px 16px; display: flex; gap: 12px;
+    }
+    .grid .ico {
+      width: 36px; height: 36px; border-radius: 50%;
+      background: linear-gradient(180deg, #fff4fc, #d6ecf6);
+      display: flex; align-items: center; justify-content: center;
+      flex: 0 0 36px; font-size: 18px;
+    }
+    .grid .body .title { font-weight: 500; font-size: 14px; margin-bottom: 2px; }
+    .grid .body .desc { font-size: 12px; color: var(--text-secondary); line-height: 1.5; }
+    .grid .save {
+      margin-top: 6px; font-size: 11px; color: var(--success-text); font-weight: 500;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="mascot-sm" aria-hidden="true"></div>
+    <h1>Crackalyzer</h1>
+    <span class="tagline">pre-attack password planner — Hashtopolis sidecar</span>
+    <span class="meter">
+      this week: <span class="pill">+0.7 household-days saved</span>
+    </span>
+  </header>
+  <nav>
+    <a class="active">Home</a><a>Setup</a><a>Composer</a><a>Coverage</a>
+    <a>Compare</a><a>Heatmap</a><a>Overlap</a><a>Cluster</a><a>Verdict</a><a>Architecture</a>
+  </nav>
+  <main>
+    <div class="panel">
+      <div class="hero">
+        <div class="hero-text">
+          <div class="pill pill-info" style="margin-bottom: 6px">plan-only · Hashtopolis cracks</div>
+          <h1>Crack smart. Save bears.</h1>
+          <p class="lead">
+            Cracking is greedy — your 8× RTX 4090 cluster eats <strong>3.6 kW</strong> when it's hashing.
+            Crackalyzer turns brute GPU-hours into ranked, deduplicated attack chains.
+            Every chain you skip saves real grid power.
+          </p>
+
+          <div class="clarify-card">
+            <div class="unit-label">how we report savings — one number, one unit</div>
+            We translate every plan into <strong>household-days</strong>:
+            the electricity an average Dutch home consumes in 24 hours (~10 kWh).
+            One full day on the cluster ≈ <strong>9 household-days</strong>.
+            A clever 2-hour plan can save <strong>~0.7 household-days</strong>.
+          </div>
+
+          <div class="cta-row">
+            <a class="cta primary" href="#">Start with Setup →</a>
+            <a class="cta" href="#">See the architecture</a>
+          </div>
+        </div>
+
+        <div class="scoreboard">
+          <div class="mascot" aria-hidden="true"></div>
+          <div class="name">Pip <span class="light">· your planning mascot</span></div>
+          <div class="label">household-days saved this quarter</div>
+          <div class="big">14.2<span class="unit"> hh-days</span></div>
+          <div class="progress"><i></i></div>
+          <div class="floor"><span>0</span><span>71 %</span><span>20 hh-days · 🏆 polar bear</span></div>
+        </div>
+      </div>
+
+      <div class="grid">
+        <div class="card">
+          <div class="ico">📊</div>
+          <div class="body">
+            <div class="title">Coverage</div>
+            <div class="desc">find the budget kink — where new masks cost more than they crack.</div>
+            <div class="save">last run: 0.4 household-days saved</div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="ico">🧩</div>
+          <div class="body">
+            <div class="title">Composer</div>
+            <div class="desc">build a ranked, deduplicated attack chain by clicking.</div>
+            <div class="save">last run: 0.2 household-days saved</div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="ico">⚖️</div>
+          <div class="body">
+            <div class="title">Verdict</div>
+            <div class="desc">grade your plan vs. brute force; household-days saved.</div>
+            <div class="save">last run: 1.8 household-days saved</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+</body>
+</html>
