@@ -4,13 +4,16 @@
 // (a floating-point score of varying precision, a space, then a word — e.g.
 // a guess-probability or scoring-model output like `1.234 password`). Bars
 // group words by the score's integer part (bucket "2" = scores in [2, 3));
-// everything past the cutoff is collected into one overflow bucket so a
-// handful of outlier scores can't stretch the axis into an unreadable long
-// tail. Multiple files render as grouped bars per bucket, one colour per
-// file, so distributions can be compared directly. Click a bar to see a
-// sample of the words that landed in that bucket, broken out per file.
-// Everything is parsed in the browser — files are never uploaded, keeping
-// this plan-only.
+// the highest-scoring buckets are folded into one overflow bucket, grown
+// dynamically from the top down for as long as it holds strictly less than
+// OVERFLOW_SHARE of the (combined, across every loaded file) corpus — so a
+// long thin tail of outlier scores can't stretch the axis into an unreadable
+// smear.
+// Multiple files render as grouped bars per bucket (as a % of each file's
+// own corpus, so distributions are comparable across differently-sized
+// files), one colour per file. Click a bar to see a sample of the words
+// that landed in that bucket, broken out per file. Everything is parsed in
+// the browser — files are never uploaded, keeping this plan-only.
 
 import { mountFinishButton } from "../util/finish_step.js";
 
@@ -26,11 +29,16 @@ const FILE_COLORS = ["#534AB7", "#185FA5", "#BA7517", "#0F6E56", "#A32D2D"];
 // so the selection is visible without repainting any file's identity colour.
 const SELECTED_BORDER_WIDTH = 3;
 
-// Scores at or past this cut off into one shared overflow bucket — see
-// module doc above.
-const OVERFLOW_AT = 10;
-// Sentinel bucket key for "score > OVERFLOW_AT". Infinity sorts after every
-// finite key with a plain numeric comparator, so it always lands last.
+// The overflow bucket collects the highest-scoring integer buckets, growing
+// downward from the top, for as long as their combined share of the (all
+// loaded files combined) corpus stays strictly below this fraction. Datasets
+// tend to have a long, thin tail of high scores — this keeps that tail from
+// stretching the axis into an unreadable smear while capping how much of
+// the corpus it can hide. Recomputed on every add/remove — see computeCutoff.
+const OVERFLOW_SHARE = 0.01;
+// Sentinel bucket key for "the dynamic overflow bucket". Infinity sorts
+// after every finite key with a plain numeric comparator, so it always
+// lands last.
 const OVERFLOW_KEY = Infinity;
 
 // Cap on how many words we keep per bucket, via reservoir sampling — so a
@@ -47,6 +55,63 @@ function cssVar(name) {
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 }
 
+// Fixed score-quality rubric, shaded behind the bars as a stoplight ramp
+// (red → orange → yellow → light green → green) so a bucket's score band
+// reads at a glance regardless of which file(s) are loaded. `max` is
+// exclusive — a zone covers [previous max, this max).
+const SCORE_ZONES = [
+  { label: "horrible", max: 3, color: "#C0392B" },
+  { label: "bad", max: 6, color: "#E07B39" },
+  { label: "moderate", max: 8, color: "#E1B93A" },
+  { label: "okay", max: 10, color: "#9ACD65" },
+  { label: "good", max: Infinity, color: "#4C9A4C" },
+];
+
+function renderZoneLegend() {
+  return SCORE_ZONES.map((z, i) => {
+    const lo = i === 0 ? null : SCORE_ZONES[i - 1].max;
+    const range = lo == null ? `&lt;${z.max}` : Number.isFinite(z.max) ? `${lo}&ndash;&lt;${z.max}` : `&ge;${lo}`;
+    return `
+      <span style="display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--text-secondary)">
+        <span style="width:10px;height:10px;border-radius:2px;background:${z.color};display:inline-block"></span>
+        ${z.label} (${range})
+      </span>`;
+  }).join("");
+}
+
+// Background box annotations shading each score-quality zone behind the
+// bars, mapped from score-space onto the category (bucket) axis. Buckets
+// are contiguous integers starting at keys[0], so bucket "score" sits at
+// index (score - keys[0]); a zone boundary at `score` falls on the left
+// edge of that bucket's column, i.e. index (score - keys[0]) - 0.5. The
+// overflow bucket (if present) is the last column and has no internal
+// boundary — a zone edge landing inside it just splits that one column.
+function scoreZoneAnnotations(keys) {
+  if (!keys.length) return {};
+  const lo = keys[0];
+  const leftEdge = -0.5;
+  const rightEdge = keys.length - 1 + 0.5;
+  const annotations = {};
+  let from = -Infinity;
+  SCORE_ZONES.forEach((zone, i) => {
+    const to = zone.max;
+    const xMin = Number.isFinite(from) ? Math.max(leftEdge, (from - lo) - 0.5) : leftEdge;
+    const xMax = Number.isFinite(to) ? Math.min(rightEdge, (to - lo) - 0.5) : rightEdge;
+    if (xMax > xMin) {
+      annotations[`zone-${i}`] = {
+        type: "box",
+        xScaleID: "x",
+        xMin, xMax,
+        backgroundColor: hexA(zone.color, 0.16),
+        borderWidth: 0,
+        drawTime: "beforeDatasetsDraw",
+      };
+    }
+    from = to;
+  });
+  return annotations;
+}
+
 export async function render(mount) {
   mount.innerHTML = `
     <div class="panel">
@@ -54,10 +119,12 @@ export async function render(mount) {
       <div class="sub">
         Upload one or more text files, each with one <code>&lt;score&gt; word</code> pair per line — a
         floating-point score, a space, then a word (e.g. <code>1.234 password</code>). Bars group words by
-        the score's integer part, so <code>2.0</code>–<code>2.99…</code> all land in bucket "2"; everything
-        above ${OVERFLOW_AT} is collected into one <code>&gt;${OVERFLOW_AT}</code> bucket. Multiple files are
-        drawn as grouped bars, one colour per file, so distributions can be compared directly. Click a bar to
-        see a sample of the words inside it, broken out per file. Parsed in your browser — nothing is uploaded.
+        the score's integer part, so <code>2.0</code>–<code>2.99…</code> all land in bucket "2"; the highest
+        buckets are folded into one overflow bucket, grown from the top down for as long as it holds under
+        ${OVERFLOW_SHARE * 100}% of the corpus, so a long thin tail can't stretch the axis into an unreadable
+        smear. Multiple files are drawn as grouped bars, one colour per file, so
+        distributions can be compared directly. Click a bar to see a sample of the words inside it, broken
+        out per file. Parsed in your browser — nothing is uploaded.
       </div>
 
       <div id="drop" style="border:1px dashed var(--border-2);border-radius:8px;padding:24px;text-align:center;color:var(--text-secondary);margin-bottom:10px">
@@ -72,6 +139,7 @@ export async function render(mount) {
       <div class="chart-wrap hidden" id="chart-wrap" style="height:360px">
         <canvas id="chart"></canvas>
       </div>
+      <div id="zone-legend" class="hidden" style="display:flex;flex-wrap:wrap;gap:12px;margin-top:8px">${renderZoneLegend()}</div>
       <div id="note" class="note hidden"></div>
       <div id="sample" class="hidden"></div>
     </div>
@@ -83,12 +151,14 @@ export async function render(mount) {
   const msg = mount.querySelector("#msg");
   const meta = mount.querySelector("#meta");
   const chartWrap = mount.querySelector("#chart-wrap");
+  const zoneLegend = mount.querySelector("#zone-legend");
   const note = mount.querySelector("#note");
   const sampleBox = mount.querySelector("#sample");
   let chart = null;
   let files = [];        // [{ id, name, parsedData }] — parsedData = parseScoreFile() result
   let nextFileId = 0;
   let keys = [];          // sorted bucket keys (union across files), gaps filled
+  let cutoff = null;      // smallest integer key folded into the overflow bucket (null = no overflow)
   let selectedKey = null;
 
   mount.querySelector("#pick").addEventListener("click", () => fileInput.click());
@@ -136,27 +206,34 @@ export async function render(mount) {
     if (!files.length) {
       meta.innerHTML = "";
       chartWrap.classList.add("hidden");
+      zoneLegend.classList.add("hidden");
       note.classList.add("hidden");
       sampleBox.classList.add("hidden");
       sampleBox.innerHTML = "";
       if (chart) { chart.destroy(); chart = null; }
       return;
     }
-    keys = fillBucketRange(files);
+    cutoff = computeCutoff(files);
+    keys = fillBucketRange(files, cutoff);
     meta.innerHTML = renderMeta(files, keys.length);
     chartWrap.classList.remove("hidden");
+    zoneLegend.classList.remove("hidden");
     note.classList.remove("hidden");
+    const overflowNote = cutoff != null
+      ? ` Scores &ge;${cutoff} are pooled into one ${bucketLabel(OVERFLOW_KEY, cutoff)} bucket — ` +
+        `combined across all loaded files it holds under ${OVERFLOW_SHARE * 100}% of the corpus.`
+      : "";
     note.innerHTML =
       `Bars show each file's share of its own corpus per integer-score bucket (bucket "n" = scores in ` +
-      `[n, n+1)), so distributions are comparable across files of different sizes; scores above ` +
-      `${OVERFLOW_AT} are pooled into one ">${OVERFLOW_AT}" bucket. Words are sampled — up to ${SAMPLE_CAP} ` +
-      `kept per bucket per file by reservoir sampling, so the sample stays representative even for buckets ` +
-      `with millions of hits. Click a bar to see its sample, per file.` +
+      `[n, n+1)), so distributions are comparable across files of different sizes.${overflowNote} Words are ` +
+      `sampled — up to ${SAMPLE_CAP} kept per bucket per file by reservoir sampling, so the sample stays ` +
+      `representative even for buckets with millions of hits. Click a bar to see its sample, per file.` +
       (files.length > FILE_COLORS.length
         ? ` Only ${FILE_COLORS.length} distinct colours are used — file colours repeat past that many files.`
         : "");
+    if (selectedKey != null && !keys.includes(selectedKey)) selectedKey = null;
     draw();
-    if (selectedKey != null && files.some((f) => f.parsedData.buckets.has(selectedKey))) showSample(selectedKey);
+    if (selectedKey != null) showSample(selectedKey);
     else { sampleBox.classList.add("hidden"); sampleBox.innerHTML = ""; }
   }
 
@@ -177,7 +254,7 @@ export async function render(mount) {
     const datasets = files.map((f, i) => {
       const color = FILE_COLORS[i % FILE_COLORS.length];
       const total = f.parsedData.parsed;
-      const counts = keys.map((k) => f.parsedData.buckets.get(k)?.count ?? 0);
+      const counts = keys.map((k) => bucketDataForFile(f, k, cutoff).count);
       const shares = counts.map((c) => (total ? (c / total) * 100 : 0));
       return {
         label: f.name,
@@ -188,7 +265,7 @@ export async function render(mount) {
         _counts: counts,
       };
     });
-    chart = renderChart(mount.querySelector("#chart"), chart, keys, datasets, files, (key) => {
+    chart = renderChart(mount.querySelector("#chart"), chart, keys, datasets, files, cutoff, (key) => {
       selectedKey = selectedKey === key ? null : key;
       draw(); // redraw so the selected bucket's border re-highlights
       if (selectedKey != null) showSample(selectedKey);
@@ -200,7 +277,7 @@ export async function render(mount) {
     sampleBox.classList.remove("hidden");
     const sections = files.map((f, i) => {
       const color = FILE_COLORS[i % FILE_COLORS.length];
-      const b = f.parsedData.buckets.get(key);
+      const b = bucketDataForFile(f, key, cutoff);
       const swatch = `<span style="width:10px;height:10px;border-radius:50%;background:${color};display:inline-block"></span>`;
       if (!b || !b.count) {
         return `
@@ -232,7 +309,7 @@ export async function render(mount) {
         </div>`;
     }).join("");
     sampleBox.innerHTML = `
-      <div style="margin-top:14px"><strong>Bucket ${bucketLabel(key)}</strong> <span class="sub" style="margin:0">${bucketRangeLabel(key)}</span></div>
+      <div style="margin-top:14px"><strong>Bucket ${bucketLabel(key, cutoff)}</strong> <span class="sub" style="margin:0">${bucketRangeLabel(key, cutoff)}</span></div>
       ${sections}
     `;
   }
@@ -269,7 +346,7 @@ export function parseScoreFile(text) {
     parsed++;
     if (value < min) min = value;
     if (value > max) max = value;
-    const key = value > OVERFLOW_AT ? OVERFLOW_KEY : Math.trunc(value);
+    const key = Math.trunc(value);
     let b = buckets.get(key);
     if (!b) { b = { count: 0, sample: [] }; buckets.set(key, b); }
     addToReservoir(b, word);
@@ -290,33 +367,90 @@ function addToReservoir(bucket, word) {
   }
 }
 
+// Finds the smallest integer key K such that folding every bucket >= K into
+// one overflow bucket keeps its combined share (summed across every loaded
+// file, against the combined corpus size) strictly below OVERFLOW_SHARE.
+// Grows from the top down, one integer bucket at a time, stopping the
+// moment adding the next one down would reach the threshold. Returns null
+// when there's nothing worth folding (fewer than two buckets, or even the
+// single highest bucket already meets/exceeds the threshold alone).
+function computeCutoff(filesList) {
+  const combined = new Map(); // integer key -> count summed across files
+  let total = 0;
+  for (const f of filesList) {
+    total += f.parsedData.parsed;
+    for (const [k, b] of f.parsedData.buckets) combined.set(k, (combined.get(k) || 0) + b.count);
+  }
+  if (!total) return null;
+  const keysDesc = [...combined.keys()].sort((a, b) => b - a);
+  if (keysDesc.length < 2) return null;
+
+  let cumulative = 0;
+  let cutoff = null;
+  for (const k of keysDesc) {
+    const tentative = cumulative + combined.get(k);
+    if (tentative / total >= OVERFLOW_SHARE) break;
+    cumulative = tentative;
+    cutoff = k;
+  }
+  // Only worth an overflow bucket if it folds in more than one integer bucket.
+  return cutoff !== null && cutoff !== keysDesc[0] ? cutoff : null;
+}
+
 // Bucket keys sorted ascending, unioned across every loaded file, with empty
 // integer buckets in between filled in (count 0) so the histogram's gaps are
-// visible rather than compressed away. The overflow bucket (if present in
-// any file) is always appended last.
-function fillBucketRange(filesList) {
+// visible rather than compressed away. Everything from `cutoff` up is
+// replaced by a single trailing overflow key (see computeCutoff).
+function fillBucketRange(filesList, cutoff) {
   const allKeys = new Set();
   for (const f of filesList) for (const k of f.parsedData.buckets.keys()) allKeys.add(k);
   if (!allKeys.size) return [];
-  const finite = [...allKeys].filter((k) => Number.isFinite(k)).sort((a, b) => a - b);
-  const hasOverflow = allKeys.has(OVERFLOW_KEY);
-  if (!finite.length) return hasOverflow ? [OVERFLOW_KEY] : [];
-  const lo = finite[0], hi = finite[finite.length - 1];
+  const finite = [...allKeys].sort((a, b) => a - b);
+  const lo = finite[0];
+  const hi = cutoff != null ? cutoff - 1 : finite[finite.length - 1];
   const out = [];
   for (let k = lo; k <= hi; k++) out.push(k);
-  if (hasOverflow) out.push(OVERFLOW_KEY);
+  if (cutoff != null) out.push(OVERFLOW_KEY);
   return out;
 }
 
-// Human label for a bucket key — the overflow bucket reads ">10" rather
+// Aggregates one file's count + a pooled sample for a displayed bucket key.
+// For the overflow key this sums every one of the file's integer buckets
+// >= cutoff and pools their samples (each source sample is already a random
+// subset of its own bucket — shuffling the pooled union keeps sample.slice()
+// unbiased for display, at the same "for illustration, not exact stats"
+// fidelity as the per-bucket reservoir it draws from).
+function bucketDataForFile(f, key, cutoff) {
+  if (key !== OVERFLOW_KEY) {
+    const b = f.parsedData.buckets.get(key);
+    return b ? b : { count: 0, sample: [] };
+  }
+  let count = 0;
+  const pools = [];
+  for (const [k, b] of f.parsedData.buckets) {
+    if (k >= cutoff) { count += b.count; pools.push(b.sample); }
+  }
+  return { count, sample: shuffled(pools.flat()) };
+}
+
+function shuffled(arr) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+// Human label for a bucket key — the overflow bucket reads "≥N" rather
 // than "Infinity".
-function bucketLabel(key) {
-  return key === OVERFLOW_KEY ? `>${OVERFLOW_AT}` : String(key);
+function bucketLabel(key, cutoff) {
+  return key === OVERFLOW_KEY ? `≥${cutoff}` : String(key);
 }
 
 // The half-open interval a bucket covers, for tooltips/headers.
-function bucketRangeLabel(key) {
-  return key === OVERFLOW_KEY ? `(${OVERFLOW_AT}, ∞)` : `[${key}, ${key + 1})`;
+function bucketRangeLabel(key, cutoff) {
+  return key === OVERFLOW_KEY ? `[${cutoff}, ∞)` : `[${key}, ${key + 1})`;
 }
 
 // ── meta ─────────────────────────────────────────────────────────────────
@@ -344,12 +478,12 @@ function renderMeta(filesList, bucketCount) {
 }
 
 // ── chart ──────────────────────────────────────────────────────────────────
-function renderChart(canvas, prev, keys, datasets, filesList, onPick) {
+function renderChart(canvas, prev, keys, datasets, filesList, cutoff, onPick) {
   if (prev) prev.destroy();
 
   const chart = new Chart(canvas, {
     type: "bar",
-    data: { labels: keys.map(bucketLabel), datasets },
+    data: { labels: keys.map((k) => bucketLabel(k, cutoff)), datasets },
     options: {
       responsive: true,
       maintainAspectRatio: false,
@@ -366,11 +500,12 @@ function renderChart(canvas, prev, keys, datasets, filesList, onPick) {
           display: datasets.length > 1,
           labels: { color: cssVar("--text-secondary") },
         },
+        annotation: { annotations: scoreZoneAnnotations(keys) },
         tooltip: {
           callbacks: {
             title: (items) => {
               const key = keys[items[0].dataIndex];
-              return `bucket ${bucketLabel(key)} · ${bucketRangeLabel(key)}`;
+              return `bucket ${bucketLabel(key, cutoff)} · ${bucketRangeLabel(key, cutoff)}`;
             },
             label: (ctx) => {
               const count = ctx.dataset._counts?.[ctx.dataIndex] ?? 0;
