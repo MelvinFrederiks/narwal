@@ -3,8 +3,10 @@
 
 import * as keyspace from "./keyspace.js";
 import * as analysisResults from "./analysis_results.js";
+import * as overlap from "./overlap.js";
 
 export const scenes = [
   { id: "keyspace", label: "Keyspace viz", module: keyspace },
   { id: "analysis-results", label: "Analysis results", module: analysisResults },
+  { id: "overlap", label: "Overlap", module: overlap },
 ];
