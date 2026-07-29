@@ -100,6 +100,10 @@ function activate(sceneId) {
 
   const scene = scenes.find((s) => s.id === sceneId) || scenes[0];
   view.innerHTML = "";
+  // Reset any per-scene width override (e.g. analysis_results.js widening
+  // #view for its charts) before the next scene renders, so it can't leak
+  // across navigation.
+  view.style.maxWidth = "";
   try {
     scene.module.render(view, { isStub: !!scene.stub });
   } catch (err) {

@@ -13,6 +13,8 @@ import * as compare from "./compare.js";
 import * as mergeability from "./mergeability.js";
 import * as heatmap from "./heatmap.js";
 import * as keyspace from "./keyspace.js";
+import * as scoreHistogram from "./score_histogram.js";
+import * as analysisResults from "./analysis_results.js";
 import * as overlap2 from "./overlap_2.js";
 import * as overlapMany from "./overlap_many.js";
 import * as cluster from "./cluster.js";
@@ -27,6 +29,8 @@ export const scenes = [
   { id: "mergeability", label: "Mergeability", module: mergeability },
   { id: "heatmap", label: "Heatmap", module: heatmap },
   { id: "keyspace", label: "Keyspace viz", module: keyspace },
+  { id: "score-histogram", label: "Score histogram", module: scoreHistogram },
+  { id: "analysis-results", label: "Analysis results", module: analysisResults },
   { id: "overlap-2", label: "Overlap · pair", module: overlap2 },
   { id: "overlap-many", label: "Overlap · network", module: overlapMany },
   { id: "cluster", label: "Cluster", module: cluster },
