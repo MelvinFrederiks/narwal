@@ -19,6 +19,11 @@ export const name = "keyspace";
 
 const ACCENT = "#534AB7"; // length bars (purple — storyboard)
 
+// Length-histogram bars: one color per corpus. Distinct hues (not a
+// saturation fade of ACCENT) so the 2nd, 3rd, 4th+ datasets stay legible
+// side by side instead of collapsing into similar pale purples.
+const BAR_PALETTE = [ACCENT, "#D85A30", "#2E8B6E", "#3B82C4", "#B0447E", "#C9A227"];
+
 // Per-token class bits. A mask's "signature" is the OR of its tokens' bits;
 // any non-class token (a literal) sets OTHER_BIT so it can't belong to a set.
 const CLASS_BIT = { "?l": 1, "?u": 2, "?d": 4, "?s": 8 };
@@ -101,6 +106,7 @@ export async function render(mount) {
       <div id="note" class="note hidden"></div>
       <div id="fluct"></div>
       <div id="maskAnalysis"></div>
+      <div id="patternAnalysis"></div>
     </div>
   `;
 
@@ -115,6 +121,7 @@ export async function render(mount) {
   const catsBox = mount.querySelector("#cats");
   const fluctBox = mount.querySelector("#fluct");
   const maskAnalysisBox = mount.querySelector("#maskAnalysis");
+  const patternAnalysisBox = mount.querySelector("#patternAnalysis");
   const floorInput = mount.querySelector("#floor");
   const floorVal = mount.querySelector("#floor-val");
   let chart = null;
@@ -124,6 +131,9 @@ export async function render(mount) {
   let maskMaster = null; // name of the dataset used as the mask-analysis master corpus
   let maskTop = 15;      // how many top masks to show (15/25/50)
   let maskSort = { key: "count", dir: "desc" }; // current mask-table sort column/direction
+  let patternMaster = null;       // name of the dataset used as the pattern-analysis master corpus
+  let patternTop = 15;            // how many top patterns to show (15/25/50)
+  let patternGrouping = "start1"; // current pattern grouping key (see PATTERN_GROUPINGS)
 
   // ── uploads ────────────────────────────────────────────────────────────────
   mount.querySelector("#pick").addEventListener("click", () => fileInput.click());
@@ -174,7 +184,9 @@ export async function render(mount) {
       catsBox.innerHTML = "";
       fluctBox.innerHTML = "";
       maskAnalysisBox.innerHTML = "";
+      patternAnalysisBox.innerHTML = "";
       maskMaster = null;
+      patternMaster = null;
       categories = [];
       chartWrap.classList.add("hidden");
       controls.classList.add("hidden");
@@ -196,6 +208,7 @@ export async function render(mount) {
     renderCatChips();
     meta.innerHTML = renderMeta(datasets);
     updateMaskAnalysis();
+    updatePatternAnalysis();
     chartWrap.classList.remove("hidden");
     controls.classList.remove("hidden");
     catsBox.classList.remove("hidden");
@@ -229,6 +242,21 @@ export async function render(mount) {
           : { key, dir: key === "mask" || key === "category" ? "asc" : "desc" };
         updateMaskAnalysis();
       },
+    );
+  }
+
+  // Keep patternMaster pointed at a dataset that still exists (fall back to
+  // the first one), then (re)render the pattern-analysis table for it.
+  function updatePatternAnalysis() {
+    if (patternMaster && !datasets.some((d) => d.name === patternMaster)) patternMaster = null;
+    if (!patternMaster && datasets.length) patternMaster = datasets[0].name;
+    renderPatternAnalysis(
+      patternAnalysisBox, datasets, patternMaster,
+      (name) => { patternMaster = name; updatePatternAnalysis(); },
+      patternTop,
+      (n) => { patternTop = n; updatePatternAnalysis(); },
+      patternGrouping,
+      (key) => { patternGrouping = key; updatePatternAnalysis(); },
     );
   }
 
@@ -408,8 +436,8 @@ function renderCategoryChips(box, cats, selected, onToggle) {
 function renderFileChips(box, datasets, { removeAt, clearAll }) {
   if (!datasets.length) { box.innerHTML = ""; return; }
   box.innerHTML = datasets.map((d, i) => {
-    const swatch = withSaturation(ACCENT, satFactor(i));
-    const faded = i > 0 ? ` <span class="sub" style="margin:0;font-size:10px">faded</span>` : "";
+    const swatch = barColorFor(i);
+    const faded = i > 0 ? ` <span class="sub" style="margin:0;font-size:10px">dashed line</span>` : "";
     return `<span style="display:inline-flex;align-items:center;gap:6px;padding:3px 8px;border:1px solid var(--border-2);border-radius:14px;font-size:12px;margin:0 6px 6px 0">
       <span style="width:10px;height:10px;border-radius:50%;background:${swatch};display:inline-block"></span>
       ${escapeHtml(d.name)}${faded}
@@ -627,10 +655,11 @@ function maskCategoryLabel(mask) {
   return base;
 }
 
-// Compress a mask into a run-length form, e.g. "?l?l?l?d?d" -> "3l 2d";
+// Compress a mask into its run-length parts, e.g. "?l?l?l?d?d" -> ["3l", "2d"];
 // consecutive literal characters are kept verbatim in quotes, e.g.
-// "pass?d?d?d?d" -> "\"pass\" 4d".
-function compressMask(mask) {
+// "pass?d?d?d?d" -> ["\"pass\"", "4d"]. Each part is one "token" in the
+// pattern-analysis sense below (n = run length, t = character class).
+function compressMaskParts(mask) {
   const toks = tokenizeMask(mask);
   const parts = [];
   let i = 0;
@@ -648,7 +677,11 @@ function compressMask(mask) {
       i = j;
     }
   }
-  return parts.join(" ");
+  return parts;
+}
+
+function compressMask(mask) {
+  return compressMaskParts(mask).join(" ");
 }
 
 const MASK_TOP_OPTIONS = [15, 25, 50];
@@ -773,6 +806,144 @@ function renderMaskAnalysis(box, datasets, masterName, onMasterChange, top, onTo
   });
 }
 
+// ── pattern analysis (start/end token groupings) ───────────────────────────
+// Masks that look distinct as whole strings often share the same structure at
+// the edges — "6l4d" and "7l4d" both "end in 4d". Rather than judge which
+// groupings are worthwhile, we fix a static lookup of the obvious ones (first
+// token, last token, first two, last two, first+last) and let the frequency
+// counts speak for themselves. A "token" here is one compressed run (e.g.
+// "5l", "2d", or a quoted literal run) from compressMaskParts.
+const PATTERN_GROUPINGS = [
+  { key: "start1", label: "Starts with", pick: (p) => (p.length >= 1 ? p.slice(0, 1) : null), join: " " },
+  { key: "end1", label: "Ends with", pick: (p) => (p.length >= 1 ? p.slice(-1) : null), join: " " },
+  { key: "start2", label: "Starts with", pick: (p) => (p.length >= 2 ? p.slice(0, 2) : null), join: " " },
+  { key: "end2", label: "Ends with", pick: (p) => (p.length >= 2 ? p.slice(-2) : null), join: " " },
+  { key: "startend", label: "Starts/ends with", pick: (p) => (p.length >= 2 ? [p[0], p[p.length - 1]] : null), join: " … " },
+];
+
+// Aggregate counts per pattern for one dataset under a grouping. Returns
+// { counts: Map(pattern -> count), total } where total is the dataset's
+// analyzed count (patterns too short for the grouping are simply excluded).
+function buildPatternCounts(dataset, grouping) {
+  const counts = new Map();
+  for (const [mask, count] of dataset.parsed.byMask) {
+    const picked = grouping.pick(compressMaskParts(mask));
+    if (!picked) continue;
+    const pattern = picked.join(grouping.join);
+    counts.set(pattern, (counts.get(pattern) || 0) + count);
+  }
+  return { counts, total: dataset.parsed.analyzed };
+}
+
+function buildTopPatternRows(dataset, grouping, top = 15) {
+  const { counts, total } = buildPatternCounts(dataset, grouping);
+  return [...counts.entries()]
+    .map(([pattern, count]) => ({ pattern, count, share: total ? count / total : 0 }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, top);
+}
+
+function renderPatternAnalysis(box, datasets, masterName, onMasterChange, top, onTopChange, groupingKey, onGroupingChange) {
+  if (!datasets.length) { box.innerHTML = ""; return; }
+  const master = datasets.find((d) => d.name === masterName) || datasets[0];
+  const others = datasets.filter((d) => d !== master);
+  const grouping = PATTERN_GROUPINGS.find((g) => g.key === groupingKey) || PATTERN_GROUPINGS[0];
+  const rows = buildTopPatternRows(master, grouping, top);
+  const otherCounts = others.map((d) => buildPatternCounts(d, grouping));
+
+  const groupingSelect = `
+    <label style="display:flex;align-items:center;gap:6px;font-size:12px">
+      <span class="sub" style="margin:0">Grouping</span>
+      <select id="pattern-grouping">
+        ${PATTERN_GROUPINGS.map((g) => `<option value="${g.key}" ${g.key === grouping.key ? "selected" : ""}>${escapeHtml(patternGroupingOptionLabel(g))}</option>`).join("")}
+      </select>
+    </label>
+  `;
+  const masterSelect = `
+    <label style="display:flex;align-items:center;gap:6px;font-size:12px">
+      <span class="sub" style="margin:0">Master corpus</span>
+      <select id="pattern-master">
+        ${datasets.map((d) => `<option value="${escapeHtml(d.name)}" ${d === master ? "selected" : ""}>${escapeHtml(baseName(d.name))}</option>`).join("")}
+      </select>
+    </label>
+  `;
+  const topSelect = `
+    <label style="display:flex;align-items:center;gap:6px;font-size:12px;margin-left:auto">
+      <span class="sub" style="margin:0">Show</span>
+      <select id="pattern-top">
+        ${MASK_TOP_OPTIONS.map((n) => `<option value="${n}" ${n === top ? "selected" : ""}>${n}</option>`).join("")}
+      </select>
+    </label>
+  `;
+  const header = `
+    <div style="display:flex;align-items:center;gap:8px;margin:14px 0 6px;flex-wrap:wrap">
+      <span style="font-weight:500">Pattern analysis</span>
+      <span class="sub" style="font-weight:400;font-size:11px">
+        how often masks in the master corpus start/end with a given run of characters (e.g. "ends with 4d")
+      </span>
+      ${groupingSelect}
+      ${masterSelect}
+      ${topSelect}
+    </div>
+  `;
+
+  const wireControls = () => {
+    box.querySelector("#pattern-grouping").addEventListener("change", (e) => onGroupingChange(e.target.value));
+    box.querySelector("#pattern-master").addEventListener("change", (e) => onMasterChange(e.target.value));
+    box.querySelector("#pattern-top").addEventListener("change", (e) => onTopChange(+e.target.value));
+  };
+
+  if (!rows.length) {
+    box.innerHTML = `<div style="margin-top:18px">${header}<div class="sub">No masks in ${escapeHtml(baseName(master.name))} are long enough for this grouping.</div></div>`;
+    wireControls();
+    return;
+  }
+
+  const td = (t, extra = "") => `<td style="padding:3px 12px 3px 0;${extra}">${t}</td>`;
+  const numeric = "text-align:right;font-variant-numeric:tabular-nums";
+
+  box.innerHTML = `
+    <div style="margin-top:18px">
+      ${header}
+      <div style="overflow:auto"><table style="border-collapse:collapse;font-size:12px">
+        <thead><tr style="color:var(--text-secondary);text-align:left">
+          <th style="padding:4px 12px 4px 0;font-weight:500">${grouping.label}</th>
+          <th style="padding:4px 12px 4px 0;font-weight:500;${numeric}">Count</th>
+          <th style="padding:4px 12px 4px 0;font-weight:500;${numeric}">% of ${escapeHtml(baseName(master.name))}</th>
+          ${others.map((d) => `<th style="padding:4px 12px 4px 0;font-weight:500;${numeric}">% of ${escapeHtml(baseName(d.name))}</th>`).join("")}
+        </tr></thead>
+        <tbody>
+          ${rows.map((r) => {
+            const otherCells = otherCounts.map(({ counts, total }) => {
+              const c = counts.get(r.pattern) || 0;
+              const share = total ? c / total : 0;
+              return td(c ? formatPct1(share) : "—", numeric);
+            }).join("");
+            return `<tr>
+              ${td(`<code>${escapeHtml(r.pattern)}</code>`)}
+              ${td(r.count.toLocaleString(), numeric)}
+              ${td(formatPct1(r.share), numeric)}
+              ${otherCells}
+            </tr>`;
+          }).join("")}
+        </tbody>
+      </table></div>
+    </div>
+  `;
+  wireControls();
+}
+
+function patternGroupingOptionLabel(g) {
+  switch (g.key) {
+    case "start1": return "First token";
+    case "end1": return "Last token";
+    case "start2": return "First two tokens";
+    case "end2": return "Last two tokens";
+    case "startend": return "First + last token";
+    default: return g.key;
+  }
+}
+
 // ── chart ──────────────────────────────────────────────────────────────────
 function renderChart(canvas, prev, datasets, labels, floor, series) {
   if (prev) prev.destroy();
@@ -782,7 +953,7 @@ function renderChart(canvas, prev, datasets, labels, floor, series) {
   // corpus's own total so corpora of very different sizes compare fairly; the
   // raw count is kept for the tooltip.
   datasets.forEach((d, i) => {
-    const barColor = withSaturation(ACCENT, satFactor(i));
+    const barColor = barColorFor(i);
     const counts = labels.map((L) => (d.parsed.countByLen.get(L) ?? null));
     const analyzed = d.parsed.analyzed;
     chartDatasets.push({
@@ -939,9 +1110,16 @@ function capNoteHtml(v) {
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 // Saturation multiplier per corpus index: first full, later ones progressively
-// faded so overlapping same-hue series stay distinguishable.
+// faded so overlapping same-hue coverage lines stay distinguishable (paired
+// with a dashed stroke for i > 0 — see renderChart).
 function satFactor(i) {
   return Math.pow(0.45, i);
+}
+
+// Bar color per corpus index — cycles through BAR_PALETTE's distinct hues
+// rather than fading one hue, so 3+ datasets remain easy to tell apart.
+function barColorFor(i) {
+  return BAR_PALETTE[i % BAR_PALETTE.length];
 }
 
 function pct(part, whole) {
