@@ -1,4 +1,4 @@
-// Scene — Keyspace visualization.
+// Scene — Mask analysis.
 //
 // Upload one or more PACK statsgen `.masks` files (mask,count per line — e.g.
 // ~/tools/pack/results/rockyou.masks) and compare them:
@@ -56,11 +56,10 @@ const COV_MAX = 1;
 const NOTE_BASE =
   "Coverage = (passwords whose mask fits the category) ÷ (alphabet<sup>len</sup>), on a log axis. " +
   "Categories are the most frequent character-class combinations in your file(s) — toggle them above. " +
-  "Bars are % of each corpus; the 2nd+ corpus is faded (and dashed). The hairline dotted line is an " +
-  "exponential fit over the whole dataset (clamped at 100%), weighted by how many passwords sit at each " +
-  "length — so it tracks where the corpus actually lives instead of being pulled off by sparse tail " +
-  "lengths; the biggest departures from it — by number of passwords, across all lengths — are tabled " +
-  "below. Click a legend entry to toggle a series.";
+  "Bars are % of each corpus; the 2nd+ corpus is faded (and dashed). An exponential fit over the whole " +
+  "dataset (clamped at 100%), weighted by how many passwords sit at each length so it tracks where the " +
+  "corpus actually lives instead of being pulled off by sparse tail lengths, feeds the collapsed " +
+  "'more/rarer than trend' tables below. Click a legend entry to toggle a series.";
 
 // Chart.js can't resolve CSS custom properties — resolve to real hex/rgb so
 // axis labels/ticks pick up the current theme. (Same trick as coverage.js.)
@@ -71,7 +70,7 @@ function cssVar(name) {
 export async function render(mount) {
   mount.innerHTML = `
     <div class="panel">
-      <h2>Keyspace visualization</h2>
+      <h2>Mask analysis</h2>
       <div class="sub">
         Upload one or more PACK statsgen <code>.masks</code> files (<code>mask,count</code> per line)
         to compare corpora. Bars are length distributions (grouped by corpus); lines are per-class
@@ -91,7 +90,7 @@ export async function render(mount) {
       <div id="controls" class="hidden" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:4px 0 10px;font-size:12px;color:var(--text-secondary)">
         <label style="display:flex;align-items:center;gap:8px;flex:1;min-width:280px">
           <span style="white-space:nowrap">Coverage floor</span>
-          <input type="range" id="floor" min="9" max="100" step="1" value="9" style="flex:1;min-width:160px"/>
+          <input type="range" id="floor" min="9" max="50" step="1" value="9" style="flex:1;min-width:160px"/>
           <span id="floor-val" style="font-variant-numeric:tabular-nums;white-space:nowrap;min-width:64px">1e-9</span>
         </label>
         <span class="sub" style="margin:0">deepen the floor to watch coverage extend to longer lengths</span>
@@ -101,6 +100,7 @@ export async function render(mount) {
       </div>
       <div id="note" class="note hidden"></div>
       <div id="fluct"></div>
+      <div id="maskAnalysis"></div>
     </div>
   `;
 
@@ -114,12 +114,16 @@ export async function render(mount) {
   const controls = mount.querySelector("#controls");
   const catsBox = mount.querySelector("#cats");
   const fluctBox = mount.querySelector("#fluct");
+  const maskAnalysisBox = mount.querySelector("#maskAnalysis");
   const floorInput = mount.querySelector("#floor");
   const floorVal = mount.querySelector("#floor-val");
   let chart = null;
   const datasets = [];   // [{ name, parsed }]
   let categories = [];   // ranked category list for current datasets
   let selected = null;   // Set of selected category keys (allowed-bits); null = uninitialised
+  let maskMaster = null; // name of the dataset used as the mask-analysis master corpus
+  let maskTop = 15;      // how many top masks to show (15/25/50)
+  let maskSort = { key: "count", dir: "desc" }; // current mask-table sort column/direction
 
   // ── uploads ────────────────────────────────────────────────────────────────
   mount.querySelector("#pick").addEventListener("click", () => fileInput.click());
@@ -169,6 +173,8 @@ export async function render(mount) {
       meta.innerHTML = "";
       catsBox.innerHTML = "";
       fluctBox.innerHTML = "";
+      maskAnalysisBox.innerHTML = "";
+      maskMaster = null;
       categories = [];
       chartWrap.classList.add("hidden");
       controls.classList.add("hidden");
@@ -189,6 +195,7 @@ export async function render(mount) {
     }
     renderCatChips();
     meta.innerHTML = renderMeta(datasets);
+    updateMaskAnalysis();
     chartWrap.classList.remove("hidden");
     controls.classList.remove("hidden");
     catsBox.classList.remove("hidden");
@@ -203,6 +210,26 @@ export async function render(mount) {
       renderCatChips();
       draw();
     });
+  }
+
+  // Keep maskMaster pointed at a dataset that still exists (fall back to the
+  // first one), then (re)render the mask-analysis table for it.
+  function updateMaskAnalysis() {
+    if (maskMaster && !datasets.some((d) => d.name === maskMaster)) maskMaster = null;
+    if (!maskMaster && datasets.length) maskMaster = datasets[0].name;
+    renderMaskAnalysis(
+      maskAnalysisBox, datasets, maskMaster,
+      (name) => { maskMaster = name; updateMaskAnalysis(); },
+      maskTop,
+      (n) => { maskTop = n; updateMaskAnalysis(); },
+      maskSort,
+      (key) => {
+        maskSort = maskSort.key === key
+          ? { key, dir: maskSort.dir === "asc" ? "desc" : "asc" }
+          : { key, dir: key === "mask" || key === "category" ? "asc" : "desc" };
+        updateMaskAnalysis();
+      },
+    );
   }
 
   // (Re)draw the chart at the current coverage floor for the selected
@@ -227,6 +254,8 @@ export async function render(mount) {
     msg.style.marginTop = "10px";
     msg.innerHTML = html;
   }
+
+  mountFinishButton(mount, { sceneId: "keyspace", label: "Mask analysis" });
 }
 
 // ── .masks parser ─────────────────────────────────────────────────────────
@@ -240,6 +269,7 @@ export function parseMasks(text) {
   const lines = text.split(/\r?\n/);
   const byLen = new Map();          // length -> total count
   const byLenSig = new Map();       // length -> Map(signature-bits -> count)
+  const byMask = new Map();         // exact mask string -> count
 
   const lineRe = /^([^,]+),\s*(\d+)\s*$/;
 
@@ -255,6 +285,7 @@ export function parseMasks(text) {
     if (!toks.length) continue;
     const L = toks.length;
     byLen.set(L, (byLen.get(L) || 0) + count);
+    byMask.set(mask, (byMask.get(mask) || 0) + count);
 
     let sig = 0;
     for (const t of toks) sig |= CLASS_BIT[t] || OTHER_BIT;
@@ -272,7 +303,7 @@ export function parseMasks(text) {
   const nameMatch = text.match(/Analyzing masks in \[([^\]]*)\]/);
   const corpus = nameMatch ? nameMatch[1] : null;
 
-  return { corpus, analyzed, lengths, byLenSig, countByLen };
+  return { corpus, analyzed, lengths, byLenSig, countByLen, byMask };
 }
 
 // Split a hashcat mask into tokens: `?x` pairs, or single literal chars.
@@ -426,8 +457,9 @@ function renderMeta(datasets) {
 // Build one plotted series per (corpus × selected category). The fit and the
 // residual table are computed over the ENTIRE dataset (every length present) —
 // independent of the displayed depth — so they depend only on the selected
-// masks, not the floor slider. Only covData/trendData (what's drawn) are
-// restricted to the displayed `labels`.
+// masks, not the floor slider. Only covData (what's drawn) is restricted to
+// the displayed `labels`. The fit itself isn't plotted on the chart — it only
+// feeds the "more/rarer than trend" tables below.
 //
 // The fit is a least-squares line ln(cov) = m·L + b (a straight line on the log
 // axis). To stay numerically stable in the deep tail (where coverage underflows
@@ -455,16 +487,9 @@ function buildSeries(datasets, cats, labels) {
 
       // what's drawn — restricted to the displayed labels
       const covData = labels.map((L) => coverageAt(d.parsed, L, cat));
-      let trendData = null;
       const residuals = [];
       if (fit && pts.length >= 3) {
-        const minL = pts[0].x, maxL = pts[pts.length - 1].x;
         const predLnCov = (L) => Math.min(0, fit.m * L + fit.b); // clamp cov ≤ 1
-        trendData = labels.map((L) => {
-          if (L < minL || L > maxL) return null;
-          const v = Math.exp(predLnCov(L));
-          return v > 0 ? v : null;
-        });
         for (const p of pts) {
           const plc = predLnCov(p.x);
           const expected = Math.exp(plc + p.x * lnSize); // trend-expected count
@@ -479,7 +504,7 @@ function buildSeries(datasets, cats, labels) {
           });
         }
       }
-      series.push({ name: baseName(d.name), corpusIndex: i, cat, color, covData, trendData, residuals });
+      series.push({ name: baseName(d.name), corpusIndex: i, cat, color, covData, residuals });
     }
   });
   return series;
@@ -565,11 +590,187 @@ function renderFluctuationTable(box, series, top = 10) {
   }
 
   box.innerHTML = `
-    <div style="display:flex;gap:24px;flex-wrap:wrap">
-      ${table("▲ More common than trend", `(≥${MIN_ROW_COUNT} passwords, by excess)`, above, "var(--success-text, #2E8B6E)")}
-      ${table("▼ Rarer than trend", `(≥${MIN_ROW_COUNT} passwords, by excess)`, below, "var(--danger-text, #C13A5B)")}
+    <details style="margin-top:12px">
+      <summary style="cursor:pointer;font-weight:500">Trend deviations <span class="sub" style="font-weight:400;font-size:11px">(more/rarer than the exponential fit predicts)</span></summary>
+      <div style="display:flex;gap:24px;flex-wrap:wrap;margin-top:6px">
+        ${table("▲ More common than trend", `(≥${MIN_ROW_COUNT} passwords, by excess)`, above, "var(--success-text, #2E8B6E)")}
+        ${table("▼ Rarer than trend", `(≥${MIN_ROW_COUNT} passwords, by excess)`, below, "var(--danger-text, #C13A5B)")}
+      </div>
+    </details>
+  `;
+}
+
+// ── mask analysis ────────────────────────────────────────────────────────
+// The category view groups masks by class-combination (e.g. "loweralphanum"),
+// which hides structure within a category: ?l?l?l?l?d?d?d?d (letters-then-
+// digits) and ?l?d?l?d?l?d?l?d look identical there. This table surfaces the
+// actual top masks — from one chosen "master" corpus — whose tokens aren't
+// all the same single class, i.e. masks with real internal structure, ranked
+// by raw count in that corpus. The other uploaded corpora each get their own
+// column so the same masks can be compared side by side (e.g. % of rockyou
+// vs. % of hashmob), independent of the category toggles / floor slider above.
+function isUniformMask(mask) {
+  const toks = tokenizeMask(mask);
+  let sig = 0;
+  for (const t of toks) sig |= CLASS_BIT[t] || OTHER_BIT;
+  return sig !== 0 && (sig & (sig - 1)) === 0; // exactly one bit set (single class, no literal)
+}
+
+function maskCategoryLabel(mask) {
+  const toks = tokenizeMask(mask);
+  let sig = 0;
+  for (const t of toks) sig |= CLASS_BIT[t] || OTHER_BIT;
+  const hasLiteral = !!(sig & OTHER_BIT);
+  const classBits = sig & ~OTHER_BIT;
+  const base = classBits ? nameFor(classBits) : "";
+  if (hasLiteral) return base ? `${base}+literal` : "literal";
+  return base;
+}
+
+// Compress a mask into a run-length form, e.g. "?l?l?l?d?d" -> "3l 2d";
+// consecutive literal characters are kept verbatim in quotes, e.g.
+// "pass?d?d?d?d" -> "\"pass\" 4d".
+function compressMask(mask) {
+  const toks = tokenizeMask(mask);
+  const parts = [];
+  let i = 0;
+  while (i < toks.length) {
+    const t = toks[i];
+    if (CLASS_BIT[t]) {
+      let j = i;
+      while (j < toks.length && toks[j] === t) j++;
+      parts.push(`${j - i}${t[1]}`);
+      i = j;
+    } else {
+      let j = i, lit = "";
+      while (j < toks.length && !CLASS_BIT[toks[j]]) { lit += toks[j]; j++; }
+      parts.push(`"${lit}"`);
+      i = j;
+    }
+  }
+  return parts.join(" ");
+}
+
+const MASK_TOP_OPTIONS = [15, 25, 50];
+
+function buildTopNonUniformMasks(dataset, top = 15) {
+  const rows = [];
+  const total = dataset.parsed.analyzed;
+  for (const [mask, count] of dataset.parsed.byMask) {
+    if (isUniformMask(mask)) continue;
+    rows.push({
+      mask,
+      count,
+      length: tokenizeMask(mask).length,
+      share: total ? count / total : 0,
+      label: maskCategoryLabel(mask),
+    });
+  }
+  return rows.sort((a, b) => b.count - a.count).slice(0, top);
+}
+
+// Column sort comparators; `share` doubles for the "% of master" column since
+// that's what's actually displayed as the master's own share.
+const MASK_SORT_KEYS = {
+  mask: (r) => r.mask,
+  length: (r) => r.length,
+  category: (r) => r.label,
+  count: (r) => r.count,
+  share: (r) => r.share,
+};
+
+function sortMaskRows(rows, sort) {
+  const key = MASK_SORT_KEYS[sort.key] || MASK_SORT_KEYS.count;
+  const dir = sort.dir === "asc" ? 1 : -1;
+  return [...rows].sort((a, b) => {
+    const av = key(a), bv = key(b);
+    if (av < bv) return -1 * dir;
+    if (av > bv) return 1 * dir;
+    return 0;
+  });
+}
+
+function renderMaskAnalysis(box, datasets, masterName, onMasterChange, top, onTopChange, sort, onSortChange) {
+  if (!datasets.length) { box.innerHTML = ""; return; }
+  const master = datasets.find((d) => d.name === masterName) || datasets[0];
+  const others = datasets.filter((d) => d !== master);
+  const rows = sortMaskRows(buildTopNonUniformMasks(master, top), sort);
+
+  const masterSelect = `
+    <label style="display:flex;align-items:center;gap:6px;font-size:12px">
+      <span class="sub" style="margin:0">Master corpus</span>
+      <select id="mask-master">
+        ${datasets.map((d) => `<option value="${escapeHtml(d.name)}" ${d === master ? "selected" : ""}>${escapeHtml(baseName(d.name))}</option>`).join("")}
+      </select>
+    </label>
+  `;
+  const topSelect = `
+    <label style="display:flex;align-items:center;gap:6px;font-size:12px;margin-left:auto">
+      <span class="sub" style="margin:0">Show</span>
+      <select id="mask-top">
+        ${MASK_TOP_OPTIONS.map((n) => `<option value="${n}" ${n === top ? "selected" : ""}>${n}</option>`).join("")}
+      </select>
+    </label>
+  `;
+  const header = `
+    <div style="display:flex;align-items:center;gap:8px;margin:14px 0 6px;flex-wrap:wrap">
+      <span style="font-weight:500">Mask analysis</span>
+      <span class="sub" style="font-weight:400;font-size:11px">
+        top masks in the master corpus that mix character classes (not lost inside a broad category like "loweralphanum")
+      </span>
+      ${masterSelect}
+      ${topSelect}
     </div>
   `;
+
+  if (!rows.length) {
+    box.innerHTML = `<div style="margin-top:18px">${header}<div class="sub">No non-uniform masks found in ${escapeHtml(baseName(master.name))}.</div></div>`;
+    box.querySelector("#mask-master").addEventListener("change", (e) => onMasterChange(e.target.value));
+    box.querySelector("#mask-top").addEventListener("change", (e) => onTopChange(+e.target.value));
+    return;
+  }
+
+  const td = (t, extra = "") => `<td style="padding:3px 12px 3px 0;${extra}">${t}</td>`;
+  const numeric = "text-align:right;font-variant-numeric:tabular-nums";
+  const sortableTh = (label, key, extra = "") => {
+    const active = sort.key === key;
+    const arrow = active ? (sort.dir === "asc" ? " ▲" : " ▼") : "";
+    return `<th data-sort-key="${key}" style="padding:4px 12px 4px 0;font-weight:500;cursor:pointer;user-select:none;${active ? "color:var(--text-primary)" : ""}${extra}">${label}${arrow}</th>`;
+  };
+
+  box.innerHTML = `
+    <div style="margin-top:18px">
+      ${header}
+      <div style="overflow:auto"><table style="border-collapse:collapse;font-size:12px">
+        <thead><tr style="color:var(--text-secondary);text-align:left">
+          ${sortableTh("Mask", "mask")}${sortableTh("Length", "length", numeric)}${sortableTh("Category", "category")}${sortableTh("Count", "count", numeric)}${sortableTh(`% of ${escapeHtml(baseName(master.name))}`, "share", numeric)}
+          ${others.map((d) => `<th style="padding:4px 12px 4px 0;font-weight:500;${numeric}">% of ${escapeHtml(baseName(d.name))}</th>`).join("")}
+        </tr></thead>
+        <tbody>
+          ${rows.map((r) => {
+            const otherCells = others.map((d) => {
+              const c = d.parsed.byMask.get(r.mask) || 0;
+              const share = d.parsed.analyzed ? c / d.parsed.analyzed : 0;
+              return td(c ? formatPct1(share) : "—", numeric);
+            }).join("");
+            return `<tr>
+              ${td(`<code title="${escapeHtml(r.mask)}">${escapeHtml(compressMask(r.mask))}</code>`)}
+              ${td(r.length, numeric)}
+              ${td(escapeHtml(r.label))}
+              ${td(r.count.toLocaleString(), numeric)}
+              ${td(formatPct1(r.share), numeric)}
+              ${otherCells}
+            </tr>`;
+          }).join("")}
+        </tbody>
+      </table></div>
+    </div>
+  `;
+  box.querySelector("#mask-master").addEventListener("change", (e) => onMasterChange(e.target.value));
+  box.querySelector("#mask-top").addEventListener("change", (e) => onTopChange(+e.target.value));
+  box.querySelectorAll("th[data-sort-key]").forEach((el) => {
+    el.addEventListener("click", () => onSortChange(el.dataset.sortKey));
+  });
 }
 
 // ── chart ──────────────────────────────────────────────────────────────────
@@ -596,9 +797,7 @@ function renderChart(canvas, prev, datasets, labels, floor, series) {
       _counts: counts,
     });
   });
-  // per series (corpus × selected category): the coverage line, plus a hairline
-  // exponential-fit trendline (hidden from legend/tooltip; feeds the deviation
-  // table below the chart).
+  // per series (corpus × selected category): the coverage line.
   for (const s of series) {
     chartDatasets.push({
       type: "line",
@@ -616,23 +815,6 @@ function renderChart(canvas, prev, datasets, labels, floor, series) {
       yAxisID: "yCov",
       order: 1,
     });
-    if (s.trendData) {
-      chartDatasets.push({
-        type: "line",
-        label: `${s.name} · ${s.cat.label} trend`,
-        data: s.trendData,
-        borderColor: s.color,
-        borderWidth: 1,        // very thin
-        pointRadius: 0,
-        borderDash: [2, 2],
-        spanGaps: true,
-        fill: false,
-        tension: 0,
-        yAxisID: "yCov",
-        order: 2, // behind the main coverage line (higher order draws first)
-        _trend: true,
-      });
-    }
   }
 
   return new Chart(canvas, {
@@ -647,11 +829,10 @@ function renderChart(canvas, prev, datasets, labels, floor, series) {
             color: cssVar("--text-secondary"),
             boxWidth: 12,
             font: { size: 11 },
-            filter: (item, data) => !data.datasets[item.datasetIndex]._trend,
           },
         },
         tooltip: {
-          filter: (item) => item.parsed.y != null && !item.dataset._trend,
+          filter: (item) => item.parsed.y != null,
           callbacks: {
             title: (items) => `length ${items[0].label}`,
             label: (ctx) => {
@@ -766,6 +947,16 @@ function satFactor(i) {
 function pct(part, whole) {
   if (!whole) return "0.0";
   return ((part / whole) * 100).toFixed(1);
+}
+
+// Mask-analysis table percentages: always one decimal; anything that would
+// round to 0.0% is shown as "<0.1%" instead, so a nonzero share never reads
+// as absent.
+function formatPct1(v) {
+  if (v == null) return "—";
+  if (!v) return "0.0%";
+  const p = v * 100;
+  return p < 0.05 ? "<0.1%" : `${p.toFixed(1)}%`;
 }
 
 // Coverage fractions span many orders of magnitude. Show human percentages when
