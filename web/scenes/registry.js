@@ -28,7 +28,7 @@ export const scenes = [
   { id: "compare", label: "Compare", module: compare },
   { id: "mergeability", label: "Mergeability", module: mergeability },
   { id: "heatmap", label: "Heatmap", module: heatmap },
-  { id: "keyspace", label: "Keyspace viz", module: keyspace },
+  { id: "keyspace", label: "Mask analysis", module: keyspace },
   { id: "score-histogram", label: "Score histogram", module: scoreHistogram },
   { id: "analysis-results", label: "Analysis results", module: analysisResults },
   { id: "overlap-2", label: "Overlap · pair", module: overlap2 },
