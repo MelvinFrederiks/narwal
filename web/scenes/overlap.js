@@ -28,6 +28,7 @@
 import { parseCorpus, computeOverlap, topSharedMasks, KIND_LABELS } from "../util/masks.js";
 import { computeWordOverlap, sampleSharedWords } from "../util/words.js";
 import { vennLayout } from "../util/venn.js";
+import { listServerFiles, serverFilePickerHtml, wireServerFilePicker } from "../util/serverFiles.js";
 
 export const name = "overlap";
 
@@ -89,6 +90,10 @@ export async function render(mount) {
   ];
   let mode = "distinct";
   let sampleToken = 0;
+
+  // No extension filter — either kind is accepted here, detected from content.
+  let serverFiles = [];
+  listServerFiles("").then((files) => { serverFiles = files; renderSlots(); });
 
   renderSlots();
   refresh();
@@ -182,6 +187,7 @@ export async function render(mount) {
         </label>
         ${body}
         <div style="font-size:11px;color:var(--text-tertiary);margin-top:8px">or drop a file here</div>
+        ${serverFilePickerHtml(serverFiles, `overlap-${s.key}`)}
       </div>
     `;
   }
@@ -205,6 +211,10 @@ export async function render(mount) {
     card.querySelector(`[data-kind="${s.key}"]`).addEventListener("change", (e) => {
       s.forced = e.target.value || null;
       if (s.file) loadInto(s, s.file);
+    });
+    wireServerFilePicker(card, serverFiles, `overlap-${s.key}`, "", (file) => {
+      s.forced = null;
+      return loadInto(s, file);
     });
     card.addEventListener("dragover", (e) => { e.preventDefault(); card.style.borderColor = s.color; });
     card.addEventListener("dragleave", () => { card.style.borderColor = s.corpus ? s.color : "var(--border-2)"; });

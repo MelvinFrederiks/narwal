@@ -59,6 +59,8 @@
 // tooltip shape) as the keyspace viz length histogram. Everything is parsed
 // in the browser — files are never uploaded.
 
+import { listServerFiles, serverFilePickerHtml, wireServerFilePicker } from "../util/serverFiles.js";
+
 export const name = "analysis-results";
 
 // Same purple accent used for the keyspace viz length-distribution bars, and
@@ -126,6 +128,7 @@ export async function render(mount) {
         <div id="drop-hint" style="font-size:11px;color:var(--text-tertiary);margin-top:8px">
           or drop JSON files here · one analysis run per file
         </div>
+        <div id="serverPicker"></div>
       </div>
       <div id="filebox" style="margin-bottom:10px"></div>
 
@@ -158,6 +161,12 @@ export async function render(mount) {
     e.preventDefault();
     drop.style.borderColor = "var(--border-2)";
     handleFiles(e.dataTransfer.files);
+  });
+
+  const serverPickerBox = mount.querySelector("#serverPicker");
+  listServerFiles(".json").then((files) => {
+    serverPickerBox.innerHTML = serverFilePickerHtml(files, "analysis");
+    wireServerFilePicker(serverPickerBox, files, "analysis", ".json", (file) => handleFiles([file]));
   });
 
   async function handleFiles(fileList) {

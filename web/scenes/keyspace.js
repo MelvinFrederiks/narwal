@@ -15,6 +15,8 @@
 // slider sets how deep into the coverage tail to look. Everything is parsed in
 // the browser — files are never uploaded, keeping this plan-only.
 
+import { listServerFiles, serverFilePickerHtml, wireServerFilePicker } from "../util/serverFiles.js";
+
 export const name = "keyspace";
 
 const ACCENT = "#534AB7"; // length bars (purple — storyboard)
@@ -86,6 +88,7 @@ export async function render(mount) {
         <input type="file" id="statsfile" accept=".masks,.txt,.csv,text/plain" multiple style="display:none"/>
         <button id="pick" class="primary" style="padding:10px 18px">Upload .masks file(s)</button>
         <div style="font-size:11px;color:var(--text-tertiary);margin-top:8px">or drop files here · e.g. <code>rockyou.masks</code> + <code>words.masks</code></div>
+        <div id="serverPicker"></div>
       </div>
       <div id="files" style="margin-bottom:10px"></div>
 
@@ -144,6 +147,12 @@ export async function render(mount) {
     e.preventDefault();
     drop.style.borderColor = "var(--border-2)";
     handleFiles(e.dataTransfer.files);
+  });
+
+  const serverPickerBox = mount.querySelector("#serverPicker");
+  listServerFiles(".masks").then((files) => {
+    serverPickerBox.innerHTML = serverFilePickerHtml(files, "keyspace");
+    wireServerFilePicker(serverPickerBox, files, "keyspace", ".masks", (file) => handleFiles([file]));
   });
 
   async function handleFiles(fileList) {

@@ -7,16 +7,18 @@ Two scenes, both entirely client-side:
 - **Keyspace viz** (`#keyspace`) — PACK `statsgen` `.masks` files → length distribution + per-character-class keyspace coverage.
 - **Analysis results** (`#analysis-results`) — JSON analysis runs → histograms and bivariate grids.
 
-Files are parsed in the browser and never uploaded. The backend serves static assets and `/healthz`; there are no API endpoints.
+Files are parsed in the browser and never uploaded. The backend serves static assets, `/healthz`, and one small API: `backend/routes/wordlists.py` lets scenes offer an optional "pick from server library" dropdown next to each upload button, browsing a read-only, operator-configured directory (see `.env.example`). Nothing else calls the backend.
 
 ## Layout
 
 ```
-backend/main.py      FastAPI app — CORS, /healthz, static mount of web/
-backend/routes/      seam for future routers (empty)
-web/index.html       shell: theme variables, design-system CSS, nav
-web/app.js           hash router + theme toggle
-web/scenes/          registry.js + the two scene modules
+backend/main.py       FastAPI app — CORS, /healthz, static mount of web/
+backend/config.py     reads NARWAL_WORDLISTS_DIR/_REGEX from .env
+backend/routes/       wordlists.py (server-library browsing) + seam for future routers
+web/index.html        shell: theme variables, design-system CSS, nav
+web/app.js            hash router + theme toggle
+web/scenes/           registry.js + the scene modules
+web/util/serverFiles.js  frontend client for the server-library dropdown
 ```
 
 - `data/`, `docs/`, `design/`, `analysis_samples/` are reference material, not inputs to the running app. `analysis_samples/` holds example `.masks` / stats files useful for exercising the scenes by hand.
@@ -40,6 +42,8 @@ The compose file bind-mounts `./backend` and `./web`, so edits to either show up
 
 Note: the container runs as root, so any `__pycache__` it writes under `backend/` ends up root-owned. Clear it with
 `docker run --rm -v "$PWD/backend:/target" python:3.11-slim bash -c 'find /target -name __pycache__ -type d -prune -exec rm -rf {} +'`.
+
+Optional server-side wordlist library: copy `.env.example` to `.env` and set `NARWAL_WORDLISTS_DIR` (host path) and `NARWAL_WORDLISTS_REGEX`. Under Docker it's bind-mounted read-only at `/mnt/wordlists`; with bare uvicorn it's read directly. Unset by default — the dropdown just doesn't appear.
 
 ## Tests
 

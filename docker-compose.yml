@@ -15,4 +15,14 @@ services:
     volumes:
       - ./backend:/app/backend
       - ./web:/app/web
+      # Optional read-only "server wordlists" library — see .env.example.
+      # NARWAL_WORDLISTS_DIR (host path, set in .env) is mounted at the fixed
+      # container path /mnt/wordlists, which the `environment:` block below
+      # then points the app at. Falls back to ./data (present, empty on a
+      # fresh clone) when unset, so the feature is a no-op rather than a
+      # broken mount.
+      - ${NARWAL_WORDLISTS_DIR:-./data}:/mnt/wordlists:ro
+    environment:
+      - NARWAL_WORDLISTS_DIR=/mnt/wordlists
+      - NARWAL_WORDLISTS_REGEX=${NARWAL_WORDLISTS_REGEX:-}
     restart: unless-stopped
