@@ -1,23 +1,18 @@
 [project]
 name = "narwal"
 version = "0.1.0"
-description = "Pre-attack password planner: profile a target hashlist against reference corpora and produce a ranked attack plan for Hashtopolis to execute."
+description = "Browser-side password corpus visualizer: keyspace coverage and analysis-result histograms."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
 dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.32",
-    "pydantic>=2.9",
-    "demeuk>=1.0",
-    "tomli>=2.0; python_version < '3.11'",
-    "httpx>=0.27",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8.3",
-    "pytest-asyncio>=0.24",
     "ruff>=0.7",
 ]
 
@@ -26,7 +21,6 @@ package = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-asyncio_mode = "auto"
 
 [tool.ruff]
 line-length = 100
