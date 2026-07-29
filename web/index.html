@@ -85,8 +85,8 @@
         background: var(--bg);
         color: var(--text);
       }
-      /* Nav doubles as the brand bar: links on the left, brand cluster
-         (theme toggle / sticker stack / narwal mascot) on the right. */
+      /* Nav doubles as the brand bar: brand + links on the left, theme
+         toggle on the right. */
       nav {
         display: flex; align-items: center; gap: 4px;
         padding: 6px 24px; min-height: 56px;
@@ -104,18 +104,12 @@
       }
       nav a:hover { background: var(--surface-2); color: var(--text); }
       nav a.active { background: var(--surface-3); color: var(--text); font-weight: 500; }
-      /* Per-link sticker badge — appears on every nav link whose scene
-         has at least one earned Polar-Unicorn. The link itself becomes
-         the "trophy case" so finishing each step is locally visible. */
-      nav a.has-sticker { position: relative; padding-right: 30px; }
-      nav a .nav-link-sticker {
-        position: absolute;
-        right: 4px; top: 50%;
-        width: 20px; height: 20px;
-        transform: translateY(-50%);
-        pointer-events: none;
-        filter: drop-shadow(0 0 1px var(--surface))
-                drop-shadow(0 0 3px rgba(255,217,106,0.45));
+      nav #brand {
+        font-size: 14px; font-weight: 600; letter-spacing: -0.2px;
+        color: var(--text);
+        padding: 6px 14px 6px 0;
+        margin-right: 6px;
+        border-right: 0.5px solid var(--border);
       }
       nav #nav-right {
         margin-left: auto;
@@ -132,19 +126,6 @@
         transition: background 0.12s ease, color 0.12s ease;
       }
       nav #theme-toggle:hover { background: var(--surface-2); color: var(--text); }
-      /* Brand mascot sits at the top-left of the nav, always visible.
-         On the home scene it desaturates + pauses to signal "you're here". */
-      nav > #brand-mascot {
-        --nrw-mascot-size: 44px;
-        margin-right: 6px;
-        flex: 0 0 auto;
-      }
-      nav > #brand-mascot.home-dim {
-        filter: grayscale(1) brightness(1.05) opacity(0.55);
-        animation-play-state: paused;
-        cursor: default;
-        pointer-events: none;
-      }
       main { padding: 24px; max-width: 1200px; margin: 0 auto; }
       .panel {
         background: var(--surface);
@@ -183,54 +164,13 @@
       .pill-warning { background: var(--warning-bg); color: var(--warning-text); }
       .pill-danger { background: var(--danger-bg); color: var(--danger-text); }
       .pill-mask { background: var(--mask-bg); color: var(--mask-text); }
-      .stub-badge {
-        display: inline-block; background: var(--warning-bg); color: var(--warning-text);
-        padding: 1px 8px; border-radius: 4px; font-size: 10px;
-        text-transform: uppercase; letter-spacing: 0.5px;
-        margin-left: 8px; vertical-align: middle;
-      }
       .chart-wrap { position: relative; height: 460px; }
       table.kv { border-collapse: collapse; font-size: 12px; color: var(--text-secondary); }
       table.kv td { padding: 2px 12px 2px 0; }
       table.kv td:first-child { color: var(--text); }
       .loading { color: var(--text-secondary); font-style: italic; }
       .error { color: var(--danger-text); }
-      .overlay {
-        position: absolute; inset: 0;
-        display: flex; flex-direction: column;
-        align-items: center; justify-content: center;
-        gap: 12px;
-        background: color-mix(in srgb, var(--surface) 85%, transparent);
-        backdrop-filter: blur(2px);
-        border-radius: var(--radius-md);
-        z-index: 5;
-        pointer-events: none;
-      }
-      .overlay.hidden { display: none; }
       .hidden { display: none !important; }
-      .overlay .label {
-        color: var(--text-secondary); font-size: 13px; letter-spacing: 0.2px;
-      }
-      .spinner {
-        width: 32px; height: 32px;
-        border: 3px solid var(--surface-3);
-        border-top-color: var(--info-border);
-        border-radius: 50%;
-        animation: spin 0.9s linear infinite;
-      }
-      @keyframes spin { to { transform: rotate(360deg); } }
-      .skeleton-bars {
-        display: flex; gap: 6px; align-items: flex-end;
-        height: 80px; opacity: 0.4;
-      }
-      .skeleton-bars i {
-        width: 10px; background: var(--info-border); display: block;
-        animation: pulse 1.2s ease-in-out infinite;
-      }
-      @keyframes pulse {
-        0%, 100% { opacity: 0.3; }
-        50%      { opacity: 0.9; }
-      }
       .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
       .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
       @media (max-width: 900px) {
@@ -258,7 +198,7 @@
   </head>
   <body>
     <nav id="nav">
-      <div id="brand-mascot"></div>
+      <span id="brand">Narwal</span>
       <div id="nav-right">
         <button id="theme-toggle"
                 type="button"
@@ -269,7 +209,6 @@
     <main id="view"></main>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
     <script type="module" src="/app.js"></script>
   </body>
 </html>

@@ -15,8 +15,6 @@
 // slider sets how deep into the coverage tail to look. Everything is parsed in
 // the browser — files are never uploaded, keeping this plan-only.
 
-import { mountFinishButton } from "../util/finish_step.js";
-
 export const name = "keyspace";
 
 const ACCENT = "#534AB7"; // length bars (purple — storyboard)
@@ -229,8 +227,6 @@ export async function render(mount) {
     msg.style.marginTop = "10px";
     msg.innerHTML = html;
   }
-
-  mountFinishButton(mount, { sceneId: "keyspace", label: "Keyspace visualization" });
 }
 
 // ── .masks parser ─────────────────────────────────────────────────────────

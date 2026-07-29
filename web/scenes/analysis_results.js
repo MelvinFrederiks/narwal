@@ -59,8 +59,6 @@
 // tooltip shape) as the keyspace viz length histogram. Everything is parsed
 // in the browser — files are never uploaded.
 
-import { mountFinishButton } from "../util/finish_step.js";
-
 export const name = "analysis-results";
 
 // Same purple accent used for the keyspace viz length-distribution bars, and
@@ -293,8 +291,6 @@ export async function render(mount) {
     msg.style.marginTop = "10px";
     msg.innerHTML = html;
   }
-
-  mountFinishButton(mount, { sceneId: "analysis-results", label: "Analysis results" });
 }
 
 function validateRun(json) {

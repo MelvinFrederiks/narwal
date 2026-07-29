@@ -2,94 +2,71 @@
   <img src="web/assets/favicon-180.png" width="160" alt="Narwal logo — rainbow-haired cartoon narwhal"/>
 </p>
 
-<h1 align="center">
-  <img src="web/assets/header-tagline.svg" width="720" alt="Narwal: Plan the attack. Save polar bears."/>
-</h1>
+<h1 align="center">Narwal</h1>
 
-**A pre-attack planner for password cracking.** Profile a target hashlist against reference password corpora, simulate candidate attack chains in software, and get a ranked, deduplicated attack plan — before burning GPU-hours on the real cluster.
+**A browser-side password corpus visualizer.** Upload the output of your own analysis tooling and get readable charts back. Everything is parsed in the browser — files are never uploaded, and the backend only serves static assets.
 
-Narwal plans; [Hashtopolis](https://github.com/hashtopolis/server) cracks. Designed to slot in as a sidecar when you're ready to ship a plan, but runs fully standalone for everything up to that point.
+## Scenes
 
-## What it does
+### Keyspace viz — `#keyspace`
 
-You give it:
-- a target hashlist (NTLM, bcrypt, MD5, …)
-- a cluster spec (defaults: 8× RTX 5080 ≈ 840 GH/s NTLM)
-- a budget (hours of cluster time)
+Upload one or more PACK `statsgen` `.masks` files (`mask,count` per line) and compare corpora:
 
-It gives you:
-- a cumulative-mask coverage chart (à la van Heijningen 2013, fig. O.2) showing how each attack contributes
-- a pairwise overlap viewer telling you which attacks are redundant
-- a per-position character-frequency heatmap of your target — diagnoses dataset character at a glance
-- a dataset-similarity cluster placing your target near the most similar reference corpus
-- a recommended attack chain with budget allocations
-- a one-click export to a Hashtopolis task chain
+- **bars** — password-length distribution as % of each corpus's own total, so different-sized corpora compare fairly.
+- **lines** — per-character-class keyspace coverage: for each category, `count(masks fitting the category) ÷ (alphabet ^ length)`, on a log axis.
 
-## Methodology
+Categories are derived from the uploaded masks (the most frequent character-class combinations), not hardcoded. A floor slider sets how deep into the coverage tail to look. A weighted exponential fit is drawn per series, and the largest departures from it are tabled below the chart.
 
-Built on two references:
+### Analysis results — `#analysis-results`
 
-1. **Van Heijningen 2013** ([thesis](https://www.researchgate.net/publication/362283500)) — the cumulative-mask cracking-time chart, per-position letter-frequency heatmaps, and Hashcat mask-attack methodology.
-2. **MAYA / Corrias et al. 2026** ([arxiv:2504.16651](https://arxiv.org/abs/2504.16651)) — dataset cleaning conventions, the seven research questions framing, the cross-cultural password-distribution insights.
+Upload one or more JSON files, each describing an analysis run (or a JSON array of several):
 
-Datasets are cleaned through [demeuk](https://github.com/NetherlandsForensicInstitute/demeuk) before profiling. Simulation uses hashcat's `--stdout` mode (fast, no GPU needed) plus PCFG/OMEN for guess-number estimates on the headline curves.
+```json
+{ "name": "length", "type": "histogram", "values": { "8": 1200, "9": 830 }, "axis": "length" }
+{ "name": "pos-char", "type": "bivariate", "values": { "0": { "a": 12, "b": 4 } }, "axis_x": "position", "axis_y": "char" }
+```
+
+Runs are collated onto one chart when their `name` fields agree. `histogram` renders bar charts with bucket-shape-aware toggles (dynamic scaling, case-insensitive merging, excluding digits/specials/other); `bivariate` renders a colour-coded 2D grid per run.
 
 ## Quick start
 
 ### With Docker
 
 ```bash
-git clone https://github.com/thatux/narwal.git
-cd narwal
-docker compose up           # standalone Narwal on :8080
-open http://localhost:8080
-```
-
-That's it — no Hashtopolis container required. The bridge is preview-only: clicking *Send to Hashtopolis* in the Verdict scene returns the v2 supertask JSON for you to POST manually. To make the bridge live-call upstream, run Narwal next to a Hashtopolis dev compose:
-
-```bash
-docker compose \
-  -f /path/to/hashtopolis/docker-compose.dev.yml \
-  -f ./docker-compose.yml \
-  up
-export HASHTOPOLIS_URL=http://hashtopolis:8080/api/v2 HASHTOPOLIS_API_KEY=…
+docker compose up
+open http://localhost:7070
 ```
 
 ### Local (no Docker)
 
 ```bash
-git clone https://github.com/thatux/narwal.git
-cd narwal
 python3 -m venv .venv && source .venv/bin/activate
-pip install fastapi 'uvicorn[standard]' pydantic demeuk httpx numpy umap-learn scikit-learn
-PYTHONPATH=. uvicorn backend.main:app --host 127.0.0.1 --port 8080
-open http://127.0.0.1:8080
+pip install fastapi 'uvicorn[standard]'
+PYTHONPATH=. uvicorn backend.main:app --host 127.0.0.1 --port 7070
+open http://127.0.0.1:7070
 ```
-
-Drop your hashlist into the composer. Click **profile target**. Read the verdict panel.
 
 ## Architecture
 
 ```
-Narwal (standalone)
-├── FastAPI backend
-├── Web UI (vanilla JS + Chart.js)
-└── Bridge → Hashtopolis REST API   ← preview JSON only, no upstream
-                                       container required to plan
+backend/
+  main.py          FastAPI app — CORS, /healthz, static mount of web/
+  routes/          seam for future API routers (empty; none needed yet)
+web/
+  index.html       shell: theme variables, design-system CSS, nav
+  app.js           hash router + theme toggle
+  scenes/
+    registry.js    add a scene here to put it in the nav
+    keyspace.js
+    analysis_results.js
 ```
 
-Drop into the Hashtopolis dev container when you want the bridge to POST live. See `wiki/architecture.md` for the longer version.
+Both scenes are entirely client-side, so there are currently no API endpoints. To add one, drop a module exposing `router` into `backend/routes/` and register it in the include loop in `backend/main.py`.
 
-## Docs
+To add a scene, export `name` and `render(mountEl)` from a module in `web/scenes/` and add it to `registry.js`.
 
-- [`wiki/architecture.md`](wiki/architecture.md) — how the pieces fit
-- [`wiki/methodology.md`](wiki/methodology.md) — what we measure and why, with paper citations
-- [`wiki/extending.md`](wiki/extending.md) — adding datasets, attacks, hash types
-
-## Status
-
-Early-stage. The headline visualizations (cumulative-mask coverage, overlap viewer, frequency heatmap) are working against fixture data. The demeuk pipeline, hashcat-stdout simulator, and Hashtopolis bridge are scaffolded but not all wired end-to-end yet.
+Charts use [Chart.js](https://www.chartjs.org/) 4.4 loaded from a CDN.
 
 ## License
 
-MIT for the tool. Reference datasets follow their own terms — see `wiki/methodology.md` for the dataset table.
+MIT.
