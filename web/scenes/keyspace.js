@@ -145,6 +145,7 @@ export async function render(mount) {
   let patternMaster = null;       // name of the dataset used as the pattern-analysis master corpus
   let patternTop = 15;            // how many top patterns to show (15/25/50)
   let patternGrouping = "start1"; // current pattern grouping key (see PATTERN_GROUPINGS)
+  let patternDiscardLong = false; // drop masks at/above the master corpus's mode length
 
   // ── uploads ────────────────────────────────────────────────────────────────
   mount.querySelector("#pick").addEventListener("click", () => fileInput.click());
@@ -294,6 +295,8 @@ export async function render(mount) {
       (n) => { patternTop = n; updatePatternAnalysis(); },
       patternGrouping,
       (key) => { patternGrouping = key; updatePatternAnalysis(); },
+      patternDiscardLong,
+      (v) => { patternDiscardLong = v; updatePatternAnalysis(); },
     );
   }
 
@@ -364,11 +367,16 @@ export function parseMasks(text) {
     .sort((a, b) => a.length - b.length);
   const countByLen = byLen;
   const analyzed = lengths.reduce((s, l) => s + l.count, 0);
+  // Most common password length — used both in the meta table and as the
+  // default "discard long patterns" cutoff in pattern analysis.
+  const modeLength = lengths.length
+    ? lengths.reduce((a, b) => (b.count > a.count ? b : a), lengths[0]).length
+    : null;
 
   const nameMatch = text.match(/Analyzing masks in \[([^\]]*)\]/);
   const corpus = nameMatch ? nameMatch[1] : null;
 
-  return { corpus, analyzed, lengths, byLenSig, countByLen, byMask };
+  return { corpus, analyzed, lengths, byLenSig, countByLen, byMask, modeLength };
 }
 
 // Split a hashcat mask into tokens: `?x` pairs, or single literal chars.
@@ -494,13 +502,13 @@ function renderMeta(datasets) {
     const min = p.lengths[0].length;
     const max = p.lengths[p.lengths.length - 1].length;
     const mean = total ? p.lengths.reduce((s, l) => s + l.length * l.count, 0) / total : 0;
-    const mode = p.lengths.reduce((a, b) => (b.count > a.count ? b : a), p.lengths[0]);
+    const modeCount = p.countByLen.get(p.modeLength) || 0;
     return {
       corpus: p.corpus,
       total: total.toLocaleString(),
       range: `${min}–${max}`,
       mean: mean.toFixed(1),
-      mode: `${mode.length} (${pct(mode.count, total)}%)`,
+      mode: `${p.modeLength} (${pct(modeCount, total)}%)`,
     };
   };
   const cols = datasets.map((d) => ({ name: d.name, s: stat(d.parsed) }));
@@ -859,37 +867,53 @@ const PATTERN_GROUPINGS = [
 ];
 
 // Aggregate counts per pattern for one dataset under a grouping. Returns
-// { counts: Map(pattern -> count), total } where total is the dataset's
-// analyzed count (patterns too short for the grouping are simply excluded).
-function buildPatternCounts(dataset, grouping) {
+// { counts: Map(pattern -> count), total } where total is the count of masks
+// that passed the length filter (patterns too short for the grouping are
+// simply excluded; discarded-as-long masks don't count towards it either, so
+// shares are of the remaining, shorter-than-cutoff corpus).
+function buildPatternCounts(dataset, grouping, discardLong) {
   const counts = new Map();
+  const cutoff = discardLong ? dataset.parsed.modeLength : null;
+  let total = 0;
   for (const [mask, count] of dataset.parsed.byMask) {
+    if (cutoff != null && tokenizeMask(mask).length >= cutoff) continue;
+    total += count;
     const picked = grouping.pick(compressMaskParts(mask));
     if (!picked) continue;
     const pattern = picked.join(grouping.join);
     counts.set(pattern, (counts.get(pattern) || 0) + count);
   }
-  return { counts, total: dataset.parsed.analyzed };
+  return { counts, total };
 }
 
-function buildTopPatternRows(dataset, grouping, top = 15) {
-  const { counts, total } = buildPatternCounts(dataset, grouping);
+function buildTopPatternRows(dataset, grouping, top = 15, discardLong = false) {
+  const { counts, total } = buildPatternCounts(dataset, grouping, discardLong);
   return [...counts.entries()]
     .map(([pattern, count]) => ({ pattern, count, share: total ? count / total : 0 }))
     .sort((a, b) => b.count - a.count)
     .slice(0, top);
 }
 
-function renderPatternAnalysis(box, datasets, masterName, onMasterChange, top, onTopChange, groupingKey, onGroupingChange) {
+function renderPatternAnalysis(
+  box, datasets, masterName, onMasterChange, top, onTopChange, groupingKey, onGroupingChange,
+  discardLong, onDiscardLongChange,
+) {
   if (!datasets.length) { box.innerHTML = ""; return; }
   const master = datasets.find((d) => d.name === masterName) || datasets[0];
   const others = datasets.filter((d) => d !== master);
   const grouping = PATTERN_GROUPINGS.find((g) => g.key === groupingKey) || PATTERN_GROUPINGS[0];
-  const rows = buildTopPatternRows(master, grouping, top);
-  const otherCounts = others.map((d) => buildPatternCounts(d, grouping));
+  const rows = buildTopPatternRows(master, grouping, top, discardLong);
+  const otherCounts = others.map((d) => buildPatternCounts(d, grouping, discardLong));
 
+  const discardLongCheckbox = `
+    <label style="display:flex;align-items:center;gap:6px;font-size:12px;margin-left:auto"
+           title="Drop masks whose length is at or above the master corpus's most common length (${master.parsed.modeLength ?? "—"})">
+      <input type="checkbox" id="pattern-discard-long" ${discardLong ? "checked" : ""}/>
+      <span class="sub" style="margin:0">Discard long patterns</span>
+    </label>
+  `;
   const groupingSelect = `
-    <label style="display:flex;align-items:center;gap:6px;font-size:12px;margin-left:auto">
+    <label style="display:flex;align-items:center;gap:6px;font-size:12px">
       <span class="sub" style="margin:0">Grouping</span>
       <select id="pattern-grouping">
         ${PATTERN_GROUPINGS.map((g) => `<option value="${g.key}" ${g.key === grouping.key ? "selected" : ""}>${escapeHtml(patternGroupingOptionLabel(g))}</option>`).join("")}
@@ -918,6 +942,7 @@ function renderPatternAnalysis(box, datasets, masterName, onMasterChange, top, o
       <span class="sub" style="margin:0;font-weight:400;font-size:11px">
         how often masks in the master corpus start/end with a given run of characters (e.g. "ends with 4d")
       </span>
+      ${discardLongCheckbox}
       ${groupingSelect}
       ${masterSelect}
       ${topSelect}
@@ -928,6 +953,7 @@ function renderPatternAnalysis(box, datasets, masterName, onMasterChange, top, o
     box.querySelector("#pattern-grouping").addEventListener("change", (e) => onGroupingChange(e.target.value));
     box.querySelector("#pattern-master").addEventListener("change", (e) => onMasterChange(e.target.value));
     box.querySelector("#pattern-top").addEventListener("change", (e) => onTopChange(+e.target.value));
+    box.querySelector("#pattern-discard-long").addEventListener("change", (e) => onDiscardLongChange(e.target.checked));
   };
 
   if (!rows.length) {
