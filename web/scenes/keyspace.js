@@ -16,6 +16,7 @@
 // the browser — files are never uploaded, keeping this plan-only.
 
 import { listServerFiles, serverFilePickerHtml, wireServerFilePicker } from "../util/serverFiles.js";
+import { formatPercent, formatPercentMagnitude } from "../util/format.js";
 
 export const name = "keyspace";
 
@@ -466,7 +467,7 @@ function renderCategoryChips(box, cats, selected, onToggle) {
     return `<button data-bits="${c.allowed}" class="${on ? "primary" : ""}"
       title="alphabet size ${c.size}" style="display:inline-flex;align-items:center;gap:6px;font-size:12px">
       <span style="width:9px;height:9px;border-radius:2px;background:${dot};display:inline-block"></span>
-      ${c.label} <span style="opacity:0.7">${(c.share * 100).toFixed(1)}%</span>
+      ${c.label} <span style="opacity:0.7">${formatPercent(c.share * 100)}</span>
     </button>`;
   }).join("");
   box.innerHTML =
@@ -1076,7 +1077,7 @@ function renderChart(canvas, prev, datasets, labels, floor, series) {
                 return `${ds.label}: ${formatFrac(v)}${v > 0 ? ` · ~1 in ${formatN(1 / v)}` : ""}`;
               }
               const c = ds._counts ? ds._counts[ctx.dataIndex] : null;
-              return `${ds.label}: ${ctx.parsed.y.toFixed(1)}%${c != null ? ` (${c.toLocaleString()})` : ""}`;
+              return `${ds.label}: ${formatPercent(ctx.parsed.y)}${c != null ? ` (${c.toLocaleString()})` : ""}`;
             },
           },
         },
@@ -1091,7 +1092,7 @@ function renderChart(canvas, prev, datasets, labels, floor, series) {
           position: "left",
           beginAtZero: true,
           title: { display: true, text: "% of corpus", color: cssVar("--text-secondary") },
-          ticks: { color: cssVar("--text-secondary"), callback: (v) => `${v}%` },
+          ticks: { color: cssVar("--text-secondary"), callback: (v) => formatPercent(v) },
           grid: { color: cssVar("--surface-3") },
         },
         yCov: {
@@ -1186,28 +1187,22 @@ function barColorFor(i) {
 }
 
 function pct(part, whole) {
-  if (!whole) return "0.0";
-  return ((part / whole) * 100).toFixed(1);
+  return formatPercentMagnitude(whole ? (part / whole) * 100 : 0);
 }
 
-// Mask-analysis table percentages: always one decimal; anything that would
-// round to 0.0% is shown as "<0.1%" instead, so a nonzero share never reads
-// as absent.
+// Mask-/pattern-analysis table percentages — see util/format.js for the
+// precision rule (a nonzero share never reads as "0.0%" or absent).
 function formatPct1(v) {
   if (v == null) return "—";
-  if (!v) return "0.0%";
-  const p = v * 100;
-  return p < 0.05 ? "<0.1%" : `${p.toFixed(1)}%`;
+  return formatPercent(v * 100);
 }
 
-// Coverage fractions span many orders of magnitude. Show human percentages when
-// reasonable, else compact scientific notation.
+// Coverage fractions span many orders of magnitude, down to well below
+// 0.1% — see util/format.js for how those are kept in plain decimal
+// notation instead of collapsing to "0%" or "2.9e-11".
 function formatFrac(v) {
   if (v == null) return "—";
-  if (!v) return "0";
-  if (v >= 0.01) return `${(v * 100).toFixed(1)}%`;
-  if (v >= 0.0001) return `${(v * 100).toFixed(3)}%`;
-  return v.toExponential(1); // e.g. "2.9e-11"
+  return formatPercent(v * 100);
 }
 
 function hexA(hex, alpha) {

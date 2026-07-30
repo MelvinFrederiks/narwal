@@ -60,6 +60,7 @@
 // in the browser — files are never uploaded.
 
 import { listServerFiles, serverFilePickerHtml, wireServerFilePicker } from "../util/serverFiles.js";
+import { formatPercent, formatPercentMagnitude, formatSignedPercent } from "../util/format.js";
 
 export const name = "analysis-results";
 
@@ -151,7 +152,7 @@ export async function render(mount) {
   // bucket-key shape — see renderHistogramType / renderBivariateType.
   // Missing keys fall back to DEFAULT_CONTROLS below.
   const controlsByGroup = new Map();
-  const DEFAULT_CONTROLS = { dynamicScaling: true, caseInsensitive: false, excludeDigits: false, excludeSpecials: false, excludeOther: false };
+  const DEFAULT_CONTROLS = { dynamicScaling: true, logarithmic: false, caseInsensitive: false, excludeDigits: false, excludeSpecials: false, excludeOther: false };
 
   mount.querySelector("#pick").addEventListener("click", () => fileInput.click());
   fileInput.addEventListener("change", () => handleFiles(fileInput.files));
@@ -469,10 +470,24 @@ function renderHistogramType(nameRuns, title, colorByRunId, { controls, onToggle
   // score_histogram's multi-file overflow cutoff.
   const keyTotals = new Map(rawBuckets.map((b) => [b, nameRuns.reduce((sum, r) => sum + (Number(r.values[b]) || 0), 0)]));
 
-  const { displayBuckets, note, controlDefs, workingBuckets } = planAxisBuckets(rawBuckets, keyTotals, controls, "");
+  const { displayBuckets, note, controlDefs, workingBuckets, allInts } = planAxisBuckets(rawBuckets, keyTotals, controls, "");
+
+  // "Logarithmic" is a pure chart-display toggle (it doesn't reshape
+  // buckets like the rest of controlDefs), so it's added here rather than
+  // inside planAxisBuckets — but only alongside "Dynamic scaling" (i.e. for
+  // numeric bucket axes), since a non-numeric axis has no dynamic-scaling
+  // control either and log/linear only matters for the value axis anyway.
+  const allControlDefs = allInts
+    ? [...controlDefs, {
+        key: "logarithmic",
+        label: "Logarithmic",
+        checked: !!controls.logarithmic,
+        title: "Switch the vertical axis (% of corpus) from a linear to a logarithmic scale.",
+      }]
+    : controlDefs;
 
   const id = `hist-${Math.random().toString(36).slice(2, 9)}`;
-  const controlsHtml = controlDefs.map((def) => `
+  const controlsHtml = allControlDefs.map((def) => `
     <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-secondary);cursor:pointer" title="${escapeHtml(def.title)}">
       <input type="checkbox" data-ctrl-key="${escapeHtml(def.key)}" ${def.checked ? "checked" : ""}/>
       ${escapeHtml(def.label)}
@@ -533,7 +548,7 @@ function renderHistogramType(nameRuns, title, colorByRunId, { controls, onToggle
                 title: (items) => `bucket ${items[0].label}`,
                 label: (ctx) => {
                   const count = ctx.dataset._counts?.[ctx.dataIndex] ?? 0;
-                  return `${ctx.dataset.label}: ${round1(ctx.parsed.y)}% of run (${count.toLocaleString()})`;
+                  return `${ctx.dataset.label}: ${formatPercent(ctx.parsed.y)} of run (${count.toLocaleString()})`;
                 },
               },
             },
@@ -545,9 +560,10 @@ function renderHistogramType(nameRuns, title, colorByRunId, { controls, onToggle
               grid: { color: cssVar("--surface-3") },
             },
             y: {
-              beginAtZero: true,
+              type: controls.logarithmic ? "logarithmic" : "linear",
+              beginAtZero: !controls.logarithmic, // meaningless on a log axis — 0 has no position on it
               title: { display: true, text: "% of corpus", color: cssVar("--text-secondary") },
-              ticks: { color: cssVar("--text-secondary"), callback: (v) => `${round1(v)}%` },
+              ticks: { color: cssVar("--text-secondary"), callback: (v) => formatPercent(v) },
               grid: { color: cssVar("--surface-3") },
             },
           },
@@ -632,6 +648,7 @@ function renderBivariateType(nameRuns, title, colorByRunId, { controls, onToggle
       run: r,
       color,
       grid,
+      runTotal,
       svg: buildHeatmapSvg(
         xPlan.displayBuckets.map((db) => db.label),
         yPlan.displayBuckets.map((db) => db.label),
@@ -639,6 +656,33 @@ function renderBivariateType(nameRuns, title, colorByRunId, { controls, onToggle
       ),
     };
   });
+
+  // With exactly two runs, a straight percentage-point difference between
+  // their grids is meaningful (with more than two there's no single "other"
+  // to diff against, and with one there's nothing to compare). Each cell's
+  // colour keeps the hue of whichever run it favours — the first run's
+  // colour for positive (more common there), the second's for negative —
+  // so it reads as an extension of the two grids above rather than a new
+  // unrelated palette.
+  const diffPanel = nameRuns.length === 2 ? (() => {
+    const [a, b] = panels;
+    const diffGrid = xPlan.displayBuckets.map((_, xi) =>
+      yPlan.displayBuckets.map((_, yi) => {
+        const pctA = a.runTotal ? (a.grid[xi][yi] / a.runTotal) * 100 : 0;
+        const pctB = b.runTotal ? (b.grid[xi][yi] / b.runTotal) * 100 : 0;
+        return pctA - pctB;
+      })
+    );
+    return {
+      a, b,
+      svg: buildDiffHeatmapSvg(
+        xPlan.displayBuckets.map((db) => db.label),
+        yPlan.displayBuckets.map((db) => db.label),
+        diffGrid, a.color, b.color, axisLabelX, axisLabelY,
+        a.run.fileLabel, b.run.fileLabel,
+      ),
+    };
+  })() : null;
 
   // One grid per card, stacked vertically — never more than one bivariate
   // grid sharing a box, even when several runs share this group's "name"
@@ -663,9 +707,22 @@ function renderBivariateType(nameRuns, title, colorByRunId, { controls, onToggle
           </div>
           ${p.svg}
         </div>`).join("")}
+      ${diffPanel ? `
+        <div class="card" style="margin-bottom:14px;overflow-x:auto">
+          <div style="display:flex;align-items:center;gap:6px;font-size:12px;margin-bottom:4px">
+            <span style="width:10px;height:10px;border-radius:50%;background:${diffPanel.a.color};display:inline-block"></span>
+            <strong>Difference</strong>
+            <span class="sub" style="margin:0">(${escapeHtml(diffPanel.a.run.fileLabel)} − ${escapeHtml(diffPanel.b.run.fileLabel)}, in percentage points)</span>
+            <span style="width:10px;height:10px;border-radius:50%;background:${diffPanel.b.color};display:inline-block"></span>
+          </div>
+          ${diffPanel.svg}
+        </div>` : ""}
       <div class="sub" style="margin-top:-8px;margin-bottom:6px">
         Cell shade = that cell's share of the run's own total, on a logarithmic scale (see the legend under each
         grid) so a handful of dominant cells can't wash out everything else to near-white.
+        ${diffPanel ? `The difference grid shades each cell by how many percentage points it favours one run
+        over the other — ${escapeHtml(diffPanel.a.run.fileLabel)}'s colour for cells more common there,
+        ${escapeHtml(diffPanel.b.run.fileLabel)}'s for cells more common in that run.` : ""}
       </div>
       ${noteHtml}
     </div>`;
@@ -732,7 +789,7 @@ function buildHeatmapSvg(xLabels, yLabels, grid, runTotal, color, axisLabelX, ax
       const pct = runTotal ? (v / runTotal) * 100 : 0;
       const x = leftPad + xi * cellW;
       const y = topPad + yi * cellH;
-      parts.push(`<rect x="${x}" y="${y}" width="${cellW - 1}" height="${cellH - 1}" fill="${mixWithWhite(color, t)}" stroke="var(--surface)" stroke-width="0.5"><title>${escapeHtml(xLabels[xi])} × ${escapeHtml(yLabels[yi])}: ${round1(pct)}% (${v.toLocaleString()})</title></rect>`);
+      parts.push(`<rect x="${x}" y="${y}" width="${cellW - 1}" height="${cellH - 1}" fill="${mixWithWhite(color, t)}" stroke="var(--surface)" stroke-width="0.5"><title>${escapeHtml(xLabels[xi])} × ${escapeHtml(yLabels[yi])}: ${formatPercent(pct)} (${v.toLocaleString()})</title></rect>`);
     }
   }
 
@@ -753,9 +810,77 @@ function buildHeatmapSvg(xLabels, yLabels, grid, runTotal, color, axisLabelX, ax
     const pct = runTotal ? (v / runTotal) * 100 : 0;
     const x = t * legendW;
     const anchor = t === 0 ? "start" : t === 1 ? "end" : "middle";
-    const label = formatSigFigPercent(pct);
+    const label = formatPercentMagnitude(pct);
     parts.push(`<text x="${x}" y="${legendY + legendBarH + 11}" text-anchor="${anchor}" font-size="9" fill="var(--text-secondary)">${label}%</text>`);
   }
+
+  parts.push("</svg>");
+  return parts.join("");
+}
+
+// Same layout as buildHeatmapSvg, but for a signed percentage-point
+// difference grid between exactly two runs: each cell keeps the hue of
+// whichever run it favours (colorPos for the first run, colorNeg for the
+// second) and its intensity is the log-scaled magnitude of the gap, so it
+// reads as an extension of the two single-run grids rather than a fresh
+// unrelated palette.
+function buildDiffHeatmapSvg(xLabels, yLabels, diffGrid, colorPos, colorNeg, axisLabelX, axisLabelY, labelPos, labelNeg) {
+  const cellW = 22, cellH = 22;
+  const titleTop = 14, tickTop = 40, topPad = titleTop + tickTop;
+  const titleLeft = 14, tickLeft = 40, leftPad = titleLeft + tickLeft;
+  const rightPad = 8, bottomPad = 6;
+  const legendGap = 12, legendBarH = 10, legendLabelH = 14;
+  const legendH = legendGap + legendBarH + legendLabelH;
+
+  const gridW = cellW * xLabels.length;
+  const gridH = cellH * yLabels.length;
+  const W = leftPad + gridW + rightPad;
+  const H = topPad + gridH + legendH + bottomPad;
+  const maxAbs = Math.max(0, ...diffGrid.flat().map(Math.abs));
+
+  const parts = [`<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="bivariate difference heatmap" xmlns="http://www.w3.org/2000/svg">`];
+
+  parts.push(`<text x="${leftPad + gridW / 2}" y="12" text-anchor="middle" font-size="11" font-weight="600" fill="var(--text-secondary)">${escapeHtml(axisLabelX)}</text>`);
+  parts.push(`<text x="12" y="${topPad + gridH / 2}" text-anchor="middle" font-size="11" font-weight="600" fill="var(--text-secondary)" transform="rotate(-90 12 ${topPad + gridH / 2})">${escapeHtml(axisLabelY)}</text>`);
+
+  for (let xi = 0; xi < xLabels.length; xi++) {
+    const x = leftPad + xi * cellW + cellW / 2;
+    parts.push(`<text x="${x}" y="${topPad - 6}" text-anchor="start" font-size="10" fill="var(--text-secondary)" transform="rotate(-45 ${x} ${topPad - 6})">${escapeHtml(xLabels[xi])}</text>`);
+  }
+  for (let yi = 0; yi < yLabels.length; yi++) {
+    const y = topPad + yi * cellH + cellH / 2;
+    parts.push(`<text x="${leftPad - 8}" y="${y + 3}" text-anchor="end" font-size="10" fill="var(--text-secondary)">${escapeHtml(yLabels[yi])}</text>`);
+  }
+  for (let xi = 0; xi < xLabels.length; xi++) {
+    for (let yi = 0; yi < yLabels.length; yi++) {
+      const v = diffGrid[xi][yi];
+      const t = logIntensity(Math.abs(v), maxAbs);
+      const color = v >= 0 ? colorPos : colorNeg;
+      const x = leftPad + xi * cellW;
+      const y = topPad + yi * cellH;
+      parts.push(`<rect x="${x}" y="${y}" width="${cellW - 1}" height="${cellH - 1}" fill="${mixWithWhite(color, t)}" stroke="var(--surface)" stroke-width="0.5"><title>${escapeHtml(xLabels[xi])} × ${escapeHtml(yLabels[yi])}: ${formatSignedPercent(v, " pp")}</title></rect>`);
+    }
+  }
+
+  // Diverging legend: two log-scaled ramps sharing a white centre at 0 —
+  // colorNeg growing outward to the left (more in the 2nd run), colorPos
+  // growing outward to the right (more in the 1st).
+  const legendY = topPad + gridH + legendGap;
+  const legendW = Math.max(cellW * 2, Math.min(220, gridW));
+  const half = legendW / 2;
+  const segs = 12;
+  for (let i = 0; i < segs; i++) {
+    const tLeft = 1 - (i + 0.5) / segs;
+    const segX = (i / segs) * half;
+    parts.push(`<rect x="${segX}" y="${legendY}" width="${half / segs + 0.5}" height="${legendBarH}" fill="${mixWithWhite(colorNeg, tLeft)}"/>`);
+    const tRight = (i + 0.5) / segs;
+    const segX2 = half + (i / segs) * half;
+    parts.push(`<rect x="${segX2}" y="${legendY}" width="${half / segs + 0.5}" height="${legendBarH}" fill="${mixWithWhite(colorPos, tRight)}"/>`);
+  }
+  parts.push(`<rect x="0" y="${legendY}" width="${legendW}" height="${legendBarH}" fill="none" stroke="var(--border-2)" stroke-width="0.5"/>`);
+  parts.push(`<text x="0" y="${legendY + legendBarH + 11}" text-anchor="start" font-size="9" fill="var(--text-secondary)">-${formatPercentMagnitude(maxAbs)}pp · ${escapeHtml(labelNeg)}</text>`);
+  parts.push(`<text x="${half}" y="${legendY + legendBarH + 11}" text-anchor="middle" font-size="9" fill="var(--text-secondary)">0</text>`);
+  parts.push(`<text x="${legendW}" y="${legendY + legendBarH + 11}" text-anchor="end" font-size="9" fill="var(--text-secondary)">+${formatPercentMagnitude(maxAbs)}pp · ${escapeHtml(labelPos)}</text>`);
 
   parts.push("</svg>");
   return parts.join("");
@@ -804,18 +929,6 @@ function computeEdgeFoldCount(countsFromEdge, total) {
 // "rockyou.json" -> "rockyou" — used to label chart series by source file.
 function baseFileName(fileName) {
   return fileName.replace(/\.[^./]+$/, "");
-}
-
-function round1(x) { return Math.round(x * 10) / 10; }
-
-// 1 decimal place down to 1%, then just enough decimals to show a single
-// significant digit below that — plain round1() would otherwise round tiny
-// legend-tick percentages (e.g. from the low end of a log scale) down to a
-// misleading "0.00".
-function formatSigFigPercent(pct) {
-  if (!(pct > 0)) return "0";
-  if (pct >= 1) return String(round1(pct));
-  return pct.toPrecision(1);
 }
 
 function hexA(hex, alpha) {

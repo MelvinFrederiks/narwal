@@ -29,6 +29,7 @@ import { parseCorpus, computeOverlap, topSharedMasks, KIND_LABELS } from "../uti
 import { computeWordOverlap, sampleSharedWords } from "../util/words.js";
 import { vennLayout } from "../util/venn.js";
 import { listServerFiles, serverFilePickerHtml, wireServerFilePicker } from "../util/serverFiles.js";
+import { formatPercentMagnitude } from "../util/format.js";
 
 export const name = "overlap";
 
@@ -516,8 +517,7 @@ function maskLength(mask) {
 }
 
 function pct(part, whole) {
-  if (!whole) return "0.0";
-  return ((part / whole) * 100).toFixed(1);
+  return formatPercentMagnitude(whole ? (part / whole) * 100 : 0);
 }
 
 function formatN(n) {
