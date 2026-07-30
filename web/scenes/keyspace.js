@@ -52,7 +52,7 @@ const CAT_PALETTE = [
   "#8E5AB8", "#4B9E3A", "#C13A5B", "#3AA0A0",
 ];
 const MAX_CATS = 8;       // how many top categories to offer as toggles
-const DEFAULT_CATS = 4;   // how many to pre-select on first load
+const DEFAULT_CATS = 0;   // how many to pre-select on first load
 
 // Coverage spans an enormous dynamic range (1.0 → below 1e-100). The log-axis
 // top is fixed at 100%; the bottom (floor) is user-driven via the slider so the
@@ -743,7 +743,7 @@ function renderMaskAnalysis(box, datasets, masterName, onMasterChange, top, onTo
   const rows = sortMaskRows(buildTopNonUniformMasks(master, top), sort);
 
   const masterSelect = `
-    <label style="display:flex;align-items:center;gap:6px;font-size:12px">
+    <label style="display:flex;align-items:center;gap:6px;font-size:12px;margin-left:auto">
       <span class="sub" style="margin:0">Master corpus</span>
       <select id="mask-master">
         ${datasets.map((d) => `<option value="${escapeHtml(d.name)}" ${d === master ? "selected" : ""}>${escapeHtml(baseName(d.name))}</option>`).join("")}
@@ -751,7 +751,7 @@ function renderMaskAnalysis(box, datasets, masterName, onMasterChange, top, onTo
     </label>
   `;
   const topSelect = `
-    <label style="display:flex;align-items:center;gap:6px;font-size:12px;margin-left:auto">
+    <label style="display:flex;align-items:center;gap:6px;font-size:12px">
       <span class="sub" style="margin:0">Show</span>
       <select id="mask-top">
         ${MASK_TOP_OPTIONS.map((n) => `<option value="${n}" ${n === top ? "selected" : ""}>${n}</option>`).join("")}
@@ -761,7 +761,7 @@ function renderMaskAnalysis(box, datasets, masterName, onMasterChange, top, onTo
   const header = `
     <div style="display:flex;align-items:center;gap:8px;margin:14px 0 6px;flex-wrap:wrap">
       <span style="font-weight:500">Mask analysis</span>
-      <span class="sub" style="font-weight:400;font-size:11px">
+      <span class="sub" style="margin:0;font-weight:400;font-size:11px">
         top masks in the master corpus that mix character classes (not lost inside a broad category like "loweralphanum")
       </span>
       ${masterSelect}
@@ -865,7 +865,7 @@ function renderPatternAnalysis(box, datasets, masterName, onMasterChange, top, o
   const otherCounts = others.map((d) => buildPatternCounts(d, grouping));
 
   const groupingSelect = `
-    <label style="display:flex;align-items:center;gap:6px;font-size:12px">
+    <label style="display:flex;align-items:center;gap:6px;font-size:12px;margin-left:auto">
       <span class="sub" style="margin:0">Grouping</span>
       <select id="pattern-grouping">
         ${PATTERN_GROUPINGS.map((g) => `<option value="${g.key}" ${g.key === grouping.key ? "selected" : ""}>${escapeHtml(patternGroupingOptionLabel(g))}</option>`).join("")}
@@ -881,7 +881,7 @@ function renderPatternAnalysis(box, datasets, masterName, onMasterChange, top, o
     </label>
   `;
   const topSelect = `
-    <label style="display:flex;align-items:center;gap:6px;font-size:12px;margin-left:auto">
+    <label style="display:flex;align-items:center;gap:6px;font-size:12px">
       <span class="sub" style="margin:0">Show</span>
       <select id="pattern-top">
         ${MASK_TOP_OPTIONS.map((n) => `<option value="${n}" ${n === top ? "selected" : ""}>${n}</option>`).join("")}
@@ -891,7 +891,7 @@ function renderPatternAnalysis(box, datasets, masterName, onMasterChange, top, o
   const header = `
     <div style="display:flex;align-items:center;gap:8px;margin:14px 0 6px;flex-wrap:wrap">
       <span style="font-weight:500">Pattern analysis</span>
-      <span class="sub" style="font-weight:400;font-size:11px">
+      <span class="sub" style="margin:0;font-weight:400;font-size:11px">
         how often masks in the master corpus start/end with a given run of characters (e.g. "ends with 4d")
       </span>
       ${groupingSelect}
