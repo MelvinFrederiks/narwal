@@ -25,8 +25,11 @@ const EXTENSIONS = [".masks", ".pack", ".json", ".dict"];
 const MAX_CHARS_PER_FILE = 20_000;
 
 const PROMPT_INSTRUCTIONS =
-  "give a paragraph-long explanation on the most notable differences between the input datasets, or the " +
-  "datasets which are analyzed. Be factual, do not make mistakes. A .masks files contains lines and counts " +
+  "give a paragraph-long explanation of the most notable differences between the underlying password " +
+  "corpora that these files are analyses of — for example differences in typical length, character-class " +
+  "usage, common masks, letter/digit frequency, or password strength (zxcvbn) distribution. Be factual, do " +
+  "not make mistakes. Do NOT comment on differences in file structure, format, or layout between the input " +
+  "files themselves — only on what the data says about the corpora. A .masks file contains lines and counts " +
   "on password mask structure with l=lower, u=upper, d=digit, s=special. A .pack file is a human-readable " +
   "analysis summary of a password corpus containing info like length and charsets. A json file can contain " +
   "a histogram or bivariate histogram, containing info described by 'name'. Infer the rest of the contents " +
