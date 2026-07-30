@@ -1,0 +1,20 @@
+{
+  "name": "rockyou",
+  "type": "histogram",
+  "values": {
+    "Noun": 9642164,
+    "Verb": 3426100,
+    "Adjective": 1859104,
+    "Adverb": 934914,
+    "Pronoun": 570449,
+    "Article": 151327,
+    "Determiner": 137385,
+    "Preposition": 531969,
+    "Conjunction": 259075,
+    "Modal": 48986,
+    "Auxiliary": 335828,
+    "Interjection": 211973,
+    "Name": 3674509,
+    "Unknown": 5031969
+  }
+}
