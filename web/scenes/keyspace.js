@@ -158,6 +158,7 @@ export async function render(mount) {
   });
 
   const serverPickerBox = mount.querySelector("#serverPicker");
+  serverPickerBox.innerHTML = `<div class="sub" style="margin:8px 0 0">indexing…</div>`;
   listServerFiles(".masks").then((files) => {
     serverPickerBox.innerHTML = serverFilePickerHtml(files, "keyspace");
     wireServerFilePicker(

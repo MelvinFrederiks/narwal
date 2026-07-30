@@ -97,7 +97,8 @@ export async function render(mount) {
 
   // No extension filter — either kind is accepted here, detected from content.
   let serverFiles = [];
-  listServerFiles("").then((files) => { serverFiles = files; renderSlots(); });
+  let serverFilesLoaded = false;
+  listServerFiles("").then((files) => { serverFiles = files; serverFilesLoaded = true; renderSlots(); });
 
   renderSlots();
   refresh();
@@ -191,7 +192,7 @@ export async function render(mount) {
         </label>
         ${body}
         <div style="font-size:11px;color:var(--text-tertiary);margin-top:8px">or drop a file here</div>
-        ${serverFilePickerHtml(serverFiles, `overlap-${s.key}`)}
+        ${serverFilesLoaded ? serverFilePickerHtml(serverFiles, `overlap-${s.key}`) : `<div class="sub" style="margin:8px 0 0">indexing…</div>`}
       </div>
     `;
   }

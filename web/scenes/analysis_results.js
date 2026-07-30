@@ -164,6 +164,7 @@ export async function render(mount) {
   });
 
   const serverPickerBox = mount.querySelector("#serverPicker");
+  serverPickerBox.innerHTML = `<div class="sub" style="margin:8px 0 0">indexing…</div>`;
   listServerFiles(".json").then((files) => {
     serverPickerBox.innerHTML = serverFilePickerHtml(files, "analysis");
     wireServerFilePicker(serverPickerBox, files, "analysis", ".json", (file) => handleFiles([file]));
