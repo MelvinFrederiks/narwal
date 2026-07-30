@@ -48,16 +48,21 @@ export function serverFilePickerHtml(files, idSuffix) {
 
 // Wires the Load button + Enter key for a picker rendered by
 // serverFilePickerHtml with the same `idSuffix`, searched for within `root`.
-// No-ops if that picker wasn't rendered (empty file list).
-export function wireServerFilePicker(root, files, idSuffix, ext, onLoad) {
+// No-ops if that picker wasn't rendered (empty file list). `beforeLoad`, if
+// given, is called with the picked file's listing entry (which already
+// carries `size`) before it's fetched — return false to abort, so a caller
+// can warn about a large file without downloading it first.
+export function wireServerFilePicker(root, files, idSuffix, ext, onLoad, beforeLoad) {
   const input = root.querySelector(`[data-server-input="${idSuffix}"]`);
   const btn = root.querySelector(`[data-server-load="${idSuffix}"]`);
   if (!input || !btn) return;
-  const validPaths = new Set(files.map((f) => f.path));
+  const byPath = new Map(files.map((f) => [f.path, f]));
 
   async function load() {
     const path = input.value.trim();
-    if (!validPaths.has(path)) return;
+    const meta = byPath.get(path);
+    if (!meta) return;
+    if (beforeLoad && (await beforeLoad(meta)) === false) return;
     btn.disabled = true;
     try {
       const file = await fetchServerFile(path, ext);

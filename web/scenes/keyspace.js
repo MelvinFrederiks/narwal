@@ -21,6 +21,10 @@ export const name = "keyspace";
 
 const ACCENT = "#534AB7"; // length bars (purple — storyboard)
 
+// Above this, parsing/rendering can take a while — confirm with the user
+// before committing to it (see handleFiles).
+const LARGE_FILE_BYTES = 50 * 1024 * 1024;
+
 // Length-histogram bars: one color per corpus. Distinct hues (not a
 // saturation fade of ACCENT) so the 2nd, 3rd, 4th+ datasets stay legible
 // side by side instead of collapsing into similar pale purples.
@@ -52,7 +56,7 @@ const CAT_PALETTE = [
   "#8E5AB8", "#4B9E3A", "#C13A5B", "#3AA0A0",
 ];
 const MAX_CATS = 8;       // how many top categories to offer as toggles
-const DEFAULT_CATS = 4;   // how many to pre-select on first load
+const DEFAULT_CATS = 0;   // how many to pre-select on first load
 
 // Coverage spans an enormous dynamic range (1.0 → below 1e-100). The log-axis
 // top is fixed at 100%; the bottom (floor) is user-driven via the slider so the
@@ -156,14 +160,33 @@ export async function render(mount) {
   const serverPickerBox = mount.querySelector("#serverPicker");
   listServerFiles(".masks").then((files) => {
     serverPickerBox.innerHTML = serverFilePickerHtml(files, "keyspace");
-    wireServerFilePicker(serverPickerBox, files, "keyspace", ".masks", (file) => handleFiles([file]));
+    wireServerFilePicker(
+      serverPickerBox, files, "keyspace", ".masks",
+      (file) => handleFiles([file]),
+      (meta) => confirmLargeFile(meta.path, meta.size),
+    );
   });
+
+  // Shared by both upload paths (browser file picker and server-library
+  // picker) so a large .masks file gets the same warning either way — for
+  // the server picker this runs against the listing's known size, before
+  // the file is even downloaded.
+  function confirmLargeFile(name, size) {
+    if (size <= LARGE_FILE_BYTES) return true;
+    const mb = (size / (1024 * 1024)).toFixed(1);
+    return confirm(
+      `${name} is ${mb} MB, which may take a long time to parse and render.\n\n` +
+      `Consider trimming it to its first 500,000 lines first.\n\n` +
+      `Process it anyway?`
+    );
+  }
 
   async function handleFiles(fileList) {
     const files = [...(fileList || [])];
     let added = 0;
     const errors = [];
     for (const file of files) {
+      if (!confirmLargeFile(file.name, file.size)) continue;
       let text;
       try { text = await file.text(); }
       catch { errors.push(`could not read ${file.name}`); continue; }
@@ -743,7 +766,7 @@ function renderMaskAnalysis(box, datasets, masterName, onMasterChange, top, onTo
   const rows = sortMaskRows(buildTopNonUniformMasks(master, top), sort);
 
   const masterSelect = `
-    <label style="display:flex;align-items:center;gap:6px;font-size:12px">
+    <label style="display:flex;align-items:center;gap:6px;font-size:12px;margin-left:auto">
       <span class="sub" style="margin:0">Master corpus</span>
       <select id="mask-master">
         ${datasets.map((d) => `<option value="${escapeHtml(d.name)}" ${d === master ? "selected" : ""}>${escapeHtml(baseName(d.name))}</option>`).join("")}
@@ -751,7 +774,7 @@ function renderMaskAnalysis(box, datasets, masterName, onMasterChange, top, onTo
     </label>
   `;
   const topSelect = `
-    <label style="display:flex;align-items:center;gap:6px;font-size:12px;margin-left:auto">
+    <label style="display:flex;align-items:center;gap:6px;font-size:12px">
       <span class="sub" style="margin:0">Show</span>
       <select id="mask-top">
         ${MASK_TOP_OPTIONS.map((n) => `<option value="${n}" ${n === top ? "selected" : ""}>${n}</option>`).join("")}
@@ -761,7 +784,7 @@ function renderMaskAnalysis(box, datasets, masterName, onMasterChange, top, onTo
   const header = `
     <div style="display:flex;align-items:center;gap:8px;margin:14px 0 6px;flex-wrap:wrap">
       <span style="font-weight:500">Mask analysis</span>
-      <span class="sub" style="font-weight:400;font-size:11px">
+      <span class="sub" style="margin:0;font-weight:400;font-size:11px">
         top masks in the master corpus that mix character classes (not lost inside a broad category like "loweralphanum")
       </span>
       ${masterSelect}
@@ -865,7 +888,7 @@ function renderPatternAnalysis(box, datasets, masterName, onMasterChange, top, o
   const otherCounts = others.map((d) => buildPatternCounts(d, grouping));
 
   const groupingSelect = `
-    <label style="display:flex;align-items:center;gap:6px;font-size:12px">
+    <label style="display:flex;align-items:center;gap:6px;font-size:12px;margin-left:auto">
       <span class="sub" style="margin:0">Grouping</span>
       <select id="pattern-grouping">
         ${PATTERN_GROUPINGS.map((g) => `<option value="${g.key}" ${g.key === grouping.key ? "selected" : ""}>${escapeHtml(patternGroupingOptionLabel(g))}</option>`).join("")}
@@ -881,7 +904,7 @@ function renderPatternAnalysis(box, datasets, masterName, onMasterChange, top, o
     </label>
   `;
   const topSelect = `
-    <label style="display:flex;align-items:center;gap:6px;font-size:12px;margin-left:auto">
+    <label style="display:flex;align-items:center;gap:6px;font-size:12px">
       <span class="sub" style="margin:0">Show</span>
       <select id="pattern-top">
         ${MASK_TOP_OPTIONS.map((n) => `<option value="${n}" ${n === top ? "selected" : ""}>${n}</option>`).join("")}
@@ -891,7 +914,7 @@ function renderPatternAnalysis(box, datasets, masterName, onMasterChange, top, o
   const header = `
     <div style="display:flex;align-items:center;gap:8px;margin:14px 0 6px;flex-wrap:wrap">
       <span style="font-weight:500">Pattern analysis</span>
-      <span class="sub" style="font-weight:400;font-size:11px">
+      <span class="sub" style="margin:0;font-weight:400;font-size:11px">
         how often masks in the master corpus start/end with a given run of characters (e.g. "ends with 4d")
       </span>
       ${groupingSelect}
