@@ -75,6 +75,10 @@ function cssVar(name) {
 }
 
 export async function render(mount) {
+  // Charts read better with more room than the shared #view's default
+  // 1200px cap (see app.js: `main { max-width: 1200px }`) — widen just this
+  // scene; app.js resets it on the next scene change so it can't leak.
+  mount.style.maxWidth = "1600px";
   mount.innerHTML = `
     <div class="panel">
       <h2>Mask analysis</h2>
