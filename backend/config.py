@@ -1,7 +1,11 @@
-"""Reads the optional read-only "server wordlists" mount config.
+"""Reads optional config from `.env` at the repo root — see .env.example.
+`docker compose` loads `.env` automatically for the `${...}` substitution in
+docker-compose.yml; this module loads the same file directly so a bare
+`uvicorn` run picks up the same config with no extra setup.
 
-Two knobs, both optional — the feature is simply absent from the UI if
-`NARWAL_WORDLISTS_DIR` is unset or doesn't exist on disk:
+Read-only "server wordlists" mount — two knobs, both optional; the feature
+is simply absent from the UI if `NARWAL_WORDLISTS_DIR` is unset or doesn't
+exist on disk:
 
   NARWAL_WORDLISTS_DIR   Directory to scan. Under Docker this is the
                          container-side mount point (see docker-compose.yml,
@@ -15,10 +19,20 @@ Two knobs, both optional — the feature is simply absent from the UI if
                          `(hashmob|rockyou)/cleaned/.*` only surfaces files
                          under those two subfolders.
 
-Set both via `.env` at the repo root — see .env.example. `docker compose`
-loads `.env` automatically for the `${...}` substitution in
-docker-compose.yml; this module loads the same file directly so a bare
-`uvicorn` run picks up the same config with no extra setup.
+"Expert opinion" LLM tab — off unless `NARWAL_LLM_ENDPOINT` is set:
+
+  NARWAL_LLM_ENDPOINT    Full URL of an OpenAI-compatible chat-completions
+                         endpoint (`POST {model, messages:[{role,content}]}`
+                         -> `{choices:[{message:{content}}]}`) — e.g. OpenAI
+                         itself, or a self-hosted Ollama/vLLM/LM Studio
+                         server exposing that same shape.
+  NARWAL_LLM_API_KEY     Optional bearer token sent as `Authorization: Bearer
+                         <key>`. Never exposed to the browser — the backend
+                         is the only thing that ever sees it (see
+                         backend/routes/llm.py).
+  NARWAL_LLM_MODEL       Model name sent in the request body. Left out of
+                         the request entirely if unset (some self-hosted
+                         endpoints default it server-side).
 """
 
 from __future__ import annotations
@@ -53,3 +67,7 @@ if wordlists_root is not None and not wordlists_root.is_dir():
     wordlists_root = None
 
 wordlists_pattern: re.Pattern | None = re.compile(_regex) if _regex else None
+
+llm_endpoint: str | None = os.environ.get("NARWAL_LLM_ENDPOINT", "").strip() or None
+llm_api_key: str | None = os.environ.get("NARWAL_LLM_API_KEY", "").strip() or None
+llm_model: str | None = os.environ.get("NARWAL_LLM_MODEL", "").strip() or None

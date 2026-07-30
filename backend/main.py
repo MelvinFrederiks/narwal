@@ -2,11 +2,13 @@
 
 Serves the static single-page UI from /. Visit http://localhost:7070/.
 
-All three scenes parse their input files entirely in the browser — the one
-API router (backend/routes/wordlists.py) only lets the frontend browse an
-optional, operator-configured read-only directory of wordlists/masks files so
-they don't have to be re-uploaded by hand. Routers belong in backend/routes/
-and get included in the loop below.
+Every scene parses its input files entirely in the browser. Two small API
+routers back optional server-side features: backend/routes/wordlists.py lets
+the frontend browse an operator-configured read-only directory of
+wordlists/masks files so they don't have to be re-uploaded by hand, and
+backend/routes/llm.py proxies the "Expert opinion" tab's queries to an
+operator-configured LLM endpoint (keeping its API key server-side). Routers
+belong in backend/routes/ and get included in the loop below.
 """
 
 from __future__ import annotations
@@ -18,7 +20,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from .routes import wordlists
+from .routes import llm, wordlists
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 
@@ -32,7 +34,7 @@ app.add_middleware(
 )
 
 # Add `<module>.router` entries here as endpoints are introduced.
-for router in (wordlists.router,):
+for router in (wordlists.router, llm.router):
     app.include_router(router)
 
 

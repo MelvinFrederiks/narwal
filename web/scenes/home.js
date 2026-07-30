@@ -37,6 +37,13 @@ const SCENES = [
       "diagram plus a table of the most common shared entries, useful for judging how redundant one corpus " +
       "is against another before merging or deduping them.",
   },
+  {
+    id: "expert-opinion",
+    label: "Expert opinion",
+    text: "Pick any combination of .masks, .pack, .json, and .dict files and ask a configured LLM to " +
+      "summarize the most notable differences between them in plain language. Requires an LLM endpoint set " +
+      "in .env — the only scene that sends file contents outside the browser.",
+  },
 ];
 
 function formatBytes(n) {

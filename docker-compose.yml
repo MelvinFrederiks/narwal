@@ -25,4 +25,7 @@ services:
     environment:
       - NARWAL_WORDLISTS_DIR=/mnt/wordlists
       - NARWAL_WORDLISTS_REGEX=${NARWAL_WORDLISTS_REGEX:-}
+      - NARWAL_LLM_ENDPOINT=${NARWAL_LLM_ENDPOINT:-}
+      - NARWAL_LLM_API_KEY=${NARWAL_LLM_API_KEY:-}
+      - NARWAL_LLM_MODEL=${NARWAL_LLM_MODEL:-}
     restart: unless-stopped

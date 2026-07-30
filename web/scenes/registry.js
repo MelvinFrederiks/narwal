@@ -5,10 +5,12 @@ import * as home from "./home.js";
 import * as keyspace from "./keyspace.js";
 import * as analysisResults from "./analysis_results.js";
 import * as overlap from "./overlap.js";
+import * as expertOpinion from "./expert_opinion.js";
 
 export const scenes = [
   { id: "home", label: "Home", module: home },
   { id: "keyspace", label: "Mask file analysis", module: keyspace },
   { id: "analysis-results", label: "Analysis results", module: analysisResults },
   { id: "overlap", label: "Overlap", module: overlap },
+  { id: "expert-opinion", label: "Expert opinion", module: expertOpinion },
 ];
