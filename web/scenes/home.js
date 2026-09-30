@@ -37,6 +37,12 @@ const SCENES = [
       "diagram plus a table of the most common shared entries, useful for judging how redundant one corpus " +
       "is against another before merging or deduping them.",
   },
+  {
+    id: "mergeability",
+    label: "Mergeability",
+    text: "Craft an attack and see how well it performs against a wordlist of your choice. Find " +
+      "redundancies and optimizations. Queue up analyses and come back later when they are done."
+  },
 ];
 
 function formatBytes(n) {
