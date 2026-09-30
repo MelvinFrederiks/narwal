@@ -1,0 +1,33 @@
+# GPU override for the mergeability worker (NVIDIA).
+#
+#   docker compose -f docker-compose.yml -f docker-compose.gpu.yml up
+#
+# Requires the NVIDIA Container Toolkit on the host. It injects the driver's
+# OpenCL ICD into the container, which hashcat then finds and prefers over the
+# PoCL CPU device baked into the image.
+#
+# NARWAL_HASHCAT_FORCE is cleared here: --force exists to get past hashcat's
+# refusal to use the outdated PoCL CPU runtime, and on a real GPU those
+# warnings are worth listening to rather than suppressing.
+#
+# For AMD/Intel instead, drop the `deploy:` block and pass the render node
+# through directly:
+#     devices:
+#       - /dev/dri:/dev/dri
+# ...with the matching ROCm or Intel OpenCL ICD installed in worker/Dockerfile.
+
+services:
+  narwal-worker:
+    environment:
+      - NARWAL_HASHCAT_FORCE=
+      # Tells the container toolkit to expose the compute stack, OpenCL
+      # included. Without `compute` hashcat sees no GPU.
+      - NVIDIA_VISIBLE_DEVICES=${NVIDIA_VISIBLE_DEVICES:-all}
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: ${NARWAL_GPU_COUNT:-all}
+              capabilities: [gpu]

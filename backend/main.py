@@ -2,11 +2,19 @@
 
 Serves the static single-page UI from /. Visit http://localhost:7070/.
 
-All three scenes parse their input files entirely in the browser — the one
-API router (backend/routes/wordlists.py) only lets the frontend browse an
-optional, operator-configured read-only directory of wordlists/masks files so
-they don't have to be re-uploaded by hand. Routers belong in backend/routes/
-and get included in the loop below.
+Two kinds of scene, and so two kinds of router:
+
+  · The keyspace, analysis-results and overlap scenes parse their input files
+    entirely in the browser. backend/routes/wordlists.py exists only so they
+    can browse an optional, operator-configured read-only directory of
+    wordlist/masks files instead of re-uploading by hand.
+  · The mergeability scene cannot run in a browser — it needs hashcat to
+    expand a real keyspace. backend/routes/jobs.py accepts a job, validates
+    it, and queues it; the worker container (worker/main.py) does the work and
+    writes the result back through the shared NARWAL_RUNS_DIR volume. This
+    process never runs hashcat.
+
+Routers belong in backend/routes/ and get included in the loop below.
 """
 
 from __future__ import annotations
@@ -18,7 +26,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from .routes import wordlists
+from .routes import jobs, wordlists
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 
@@ -32,7 +40,7 @@ app.add_middleware(
 )
 
 # Add `<module>.router` entries here as endpoints are introduced.
-for router in (wordlists.router,):
+for router in (wordlists.router, jobs.router):
     app.include_router(router)
 
 

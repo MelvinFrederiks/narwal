@@ -21,6 +21,9 @@ package = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "integration: drives a real hashcat binary; skipped unless one is runnable (NARWAL_HASHCAT_BIN, or hashcat on PATH)",
+]
 
 [tool.ruff]
 line-length = 100
