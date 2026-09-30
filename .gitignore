@@ -37,6 +37,10 @@ uv.lock
 .env.local
 *.log
 
+# Mergeability job queue + per-job hashcat artifacts (NARWAL_RUNS_DIR).
+# Runtime state, not source — see docker-compose.yml.
+runs/
+
 data/screenshots/
 # Playwright render artifacts inside data/mockups/ — temporary screenshots
 # from iteration loops; the real mockup HTMLs (no underscore) are tracked.

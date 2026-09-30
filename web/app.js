@@ -75,7 +75,10 @@ function buildNav() {
   }
 }
 
-function activate(sceneId) {
+// `route` is everything after the scene id — `#mergeability/ab12` renders the
+// mergeability scene with route "ab12". Scenes that don't take a parameter
+// simply ignore the second argument.
+function activate(sceneId, route) {
   for (const a of nav.querySelectorAll("a")) {
     a.classList.toggle("active", a.dataset.sceneId === sceneId);
   }
@@ -87,7 +90,7 @@ function activate(sceneId) {
   // across navigation.
   view.style.maxWidth = "";
   try {
-    scene.module.render(view);
+    scene.module.render(view, route);
   } catch (err) {
     view.innerHTML = `<div class="panel error">scene "${scene.id}" failed to render: ${err.message}</div>`;
     console.error(err);
@@ -95,8 +98,10 @@ function activate(sceneId) {
 }
 
 function onHashChange() {
-  const id = (location.hash || `#${scenes[0].id}`).slice(1);
-  activate(id);
+  const hash = (location.hash || `#${scenes[0].id}`).slice(1);
+  const slash = hash.indexOf("/");
+  const id = slash === -1 ? hash : hash.slice(0, slash);
+  activate(id, slash === -1 ? "" : hash.slice(slash + 1));
   // Scroll the new scene into view from the top — otherwise navigating
   // away from a long scene leaves the user looking at the middle of the
   // next page.
