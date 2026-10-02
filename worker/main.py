@@ -38,7 +38,7 @@ import time
 import uuid
 
 from backend import config
-from backend.jobs import db, metrics, ordering
+from backend.jobs import db, metrics, ordering, wakeup
 from backend.jobs import spec as spec_mod
 
 from . import hashcat
@@ -50,6 +50,11 @@ log = logging.getLogger("narwal.worker")
 
 POLL_SECONDS = float(os.environ.get("NARWAL_WORKER_POLL", "2"))
 STALE_SECONDS = float(os.environ.get("NARWAL_WORKER_STALE", "120"))
+# How long an idle worker blocks before waking to do housekeeping. It is woken
+# immediately when a job is enqueued, so this bounds nothing a user waits for —
+# it only bounds how quickly an abandoned job gets requeued. Used instead of
+# POLL_SECONDS whenever the wakeup FIFO is available.
+IDLE_SECONDS = float(os.environ.get("NARWAL_WORKER_IDLE", "30"))
 SAMPLE_SIZE = 20  # example passwords shown per pair
 
 _stop = False
@@ -72,18 +77,34 @@ def _sample(words: set[bytes], limit: int = SAMPLE_SIZE) -> list[str]:
     return [w.decode("utf-8", "replace") for w in sorted(words)[:limit]]
 
 
-def _run_attacks(conn, job_id: str, spec: spec_mod.JobSpec) -> list[hashcat.AttackRun]:
+def _run_attacks(
+    conn, job_id: str, spec: spec_mod.JobSpec
+) -> tuple[list[hashcat.AttackRun], dict[str, float]]:
     """Run every attack in the spec against the full goal list, in spec order.
 
     Shared by both job kinds — the sequence the attacks happen to be run in
     here has no bearing on either summary, since each one sees the whole goal
     list and none of them sees another's results.
+
+    Returns the runs plus how long the warm-up took per attack mode.
     """
     workdir = config.job_dir(job_id)
     workdir.mkdir(parents=True, exist_ok=True)
 
     runs: list[hashcat.AttackRun] = []
     total = len(spec.attacks)
+
+    # Before anything is timed: compile the kernel for each attack mode this
+    # job uses, so that one-time cost is not charged to whichever attack
+    # happens to go first. An ordering job schedules against these durations,
+    # so a contaminated one is not a cosmetic problem — see hashcat.warm_up.
+    warmup: dict[str, float] = {}
+    if config.hashcat_warmup:
+        db.heartbeat(conn, job_id, {
+            "attack_index": 0, "attack_count": total,
+            "attack_label": "warming up", "status": None,
+        })
+        warmup = hashcat.warm_up(spec, workdir, session=f"narwal-{job_id}-{uuid.uuid4().hex[:8]}")
 
     for index, attack in enumerate(spec.attacks):
         if _stop:
@@ -135,7 +156,7 @@ def _run_attacks(conn, job_id: str, spec: spec_mod.JobSpec) -> list[hashcat.Atta
             job_id, index + 1, total, len(run.recovered), run.goal_loaded, run.duration_s,
         )
 
-    return runs
+    return runs, warmup
 
 
 def run_job(conn, job: dict) -> dict:
@@ -145,7 +166,7 @@ def run_job(conn, job: dict) -> dict:
     spec = spec_mod.validate(job["spec"])
 
     started = time.time()
-    runs = _run_attacks(conn, job_id, spec)
+    runs, warmup = _run_attacks(conn, job_id, spec)
     recovered = {r.label: r.recovered for r in runs}
 
     # Every attack read the same goal file, so these should agree; take the
@@ -187,6 +208,10 @@ def run_job(conn, job: dict) -> dict:
         goal=str(spec.goal.relative_to(config.wordlists_root)),
         goal_rejected=goal_rejected,
         partial=partial,
+        # Seconds spent compiling kernels before the clock started, per attack
+        # mode. Zero-ish means the cache was already warm. Recorded so a
+        # surprising set of durations can be checked against it.
+        warmup_s=warmup,
         max_runtime_s=spec.max_runtime_s,
         hashcat_version=_HASHCAT_VERSION,
         started_at=started,
@@ -245,6 +270,16 @@ def process_one(conn) -> bool:
 
 def main() -> int:
     global _HASHCAT_VERSION
+
+    # A self-pipe for signals. Without it a SIGTERM arriving while the worker
+    # is blocked in select() would set _stop and then go back to sleep for the
+    # rest of the timeout — long enough for Docker's 10-second stop grace to
+    # run out and SIGKILL the container mid-shutdown. Python writes a byte here
+    # on every signal, which the wait() below watches alongside the FIFO.
+    sig_r, sig_w = os.pipe()
+    os.set_blocking(sig_r, False)
+    os.set_blocking(sig_w, False)
+    signal.set_wakeup_fd(sig_w)
     signal.signal(signal.SIGTERM, _handle_signal)
     signal.signal(signal.SIGINT, _handle_signal)
 
@@ -253,7 +288,7 @@ def main() -> int:
     except Exception as err:  # noqa: BLE001
         log.error("hashcat is not usable: %s", err)
         return 1
-    log.info("hashcat %s", _HASHCAT_VERSION)
+    log.info("hashcat %s (%s)", _HASHCAT_VERSION, config.hashcat_bin)
 
     if config.wordlists_root is None:
         log.warning(
@@ -263,18 +298,45 @@ def main() -> int:
 
     conn = db.connect()
     db.init(conn)
-    log.info("watching queue at %s", config.db_path())
+
+    # Sleep on a FIFO rather than polling the queue. None means this filesystem
+    # cannot host one, in which case the old poll loop is still correct — just
+    # chattier.
+    fifo = wakeup.ensure()
+    waiter = wakeup.Waiter(fifo) if fifo else None
+    log.info(
+        "watching queue at %s (%s)",
+        config.db_path(),
+        f"idle until nudged, {IDLE_SECONDS:g}s fallback" if waiter
+        else f"polling every {POLL_SECONDS:g}s — no FIFO on this filesystem",
+    )
+
+    def idle() -> None:
+        if waiter:
+            waiter.wait(IDLE_SECONDS, also=(sig_r,))
+        else:
+            time.sleep(POLL_SECONDS)
 
     while not _stop:
         try:
             if n := db.requeue_stale(conn, STALE_SECONDS):
                 log.warning("requeued %d job(s) whose worker went away", n)
-            if not process_one(conn):
-                time.sleep(POLL_SECONDS)
+            # Drain the queue before sleeping: one wakeup may cover several
+            # jobs enqueued back to back, and a notification already consumed
+            # is not repeated.
+            while not _stop and process_one(conn):
+                pass
+            if not _stop:
+                idle()
         except Exception:  # noqa: BLE001 — keep the loop alive through DB blips
             log.exception("worker loop error")
             time.sleep(POLL_SECONDS)
 
+    if waiter:
+        waiter.close()
+    signal.set_wakeup_fd(-1)
+    os.close(sig_r)
+    os.close(sig_w)
     conn.close()
     log.info("stopped")
     return 0

@@ -18,6 +18,13 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
+# The worker image ships no hashcat — it is bind-mounted from NARWAL_HASHCAT_DIR
+# (see .env.example). Without it the worker exits at startup and this script
+# would just sit watching a job that never gets claimed.
+HCDIR=$(sed -n 's/^NARWAL_HASHCAT_DIR=//p' .env 2>/dev/null | tr -d "\"'")
+[ -n "$HCDIR" ] && [ -x "$HCDIR/hashcat" ] || {
+  echo "set NARWAL_HASHCAT_DIR in .env to a hashcat install first (see .env.example)"; exit 1; }
+
 LIB=$(mktemp -d)
 RUNS=$(mktemp -d)
 chmod a+rwX "$RUNS"

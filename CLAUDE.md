@@ -21,7 +21,7 @@ The backend serves static assets, `/healthz`, and two routers: `backend/routes/w
 backend/main.py       FastAPI app — CORS, /healthz, static mount of web/
 backend/config.py     reads .env: wordlist library, runs dir, hashcat settings
 backend/routes/       wordlists.py (server-library browsing), jobs.py (queue API)
-backend/jobs/         db.py (SQLite queue), spec.py (validation), metrics.py, ordering.py
+backend/jobs/         db.py (SQLite queue), spec.py (validation), metrics.py, ordering.py, wakeup.py
 worker/               separate container: claims jobs, runs hashcat, writes results
 web/index.html        shell: theme variables, design-system CSS, nav
 web/app.js            hash router (`#scene/param`) + theme toggle
@@ -33,15 +33,23 @@ runs/                 job queue + per-job artifacts; gitignored, runtime-created
 
 `backend/jobs/` is imported by *both* containers, which is why it holds no FastAPI. The worker's only dependency is the stdlib plus the hashcat binary.
 
+**The worker does not poll.** `backend/jobs/wakeup.py` is a FIFO in `NARWAL_RUNS_DIR`: the API writes a byte on enqueue, the worker blocks in `select()` until it arrives, with `NARWAL_WORKER_IDLE` (30s) as a fallback for housekeeping. Idle cost went from two write transactions every 2s to nothing; enqueue-to-running went from up to 2s to ~0.03s. Three things keep it safe: a FIFO buffers, so a notification sent mid-job is still there afterwards; every wait has a timeout, so a lost notification costs latency and never a job; and `ensure()` returning None (a filesystem with no FIFO support) puts the worker back on the old poll loop. The `Waiter` opens the FIFO `O_RDWR` rather than `O_RDONLY` deliberately — read-only would block at startup until a writer appeared, and would spin `select()` on permanent EOF once the last writer closed, which is the busy loop this replaces. The worker also watches a `signal.set_wakeup_fd` pipe, without which a SIGTERM arriving mid-sleep would set the stop flag and then sleep out the rest of the timeout, past Docker's 10s stop grace.
+
 - `data/`, `docs/`, `design/`, `analysis_samples/` are reference material, not inputs to the running app. `analysis_samples/` holds example `.masks` / stats files useful for exercising the scenes by hand.
 - `docs/storyboard.html` and `docs/papers/` are design/background reference only.
 
 ## Running
 
 ```
-docker compose up          # http://localhost:7070/ — web UI + mergeability worker
+docker compose up          # http://localhost:7070/ — web UI + hashcat worker
 docker compose -f docker-compose.yml -f docker-compose.gpu.yml up   # NVIDIA GPU
 ```
+
+**The worker image ships no hashcat.** Set `NARWAL_HASHCAT_DIR` in `.env` to your own install (any hashcat tree: a release tarball or a `git clone && make` build); it is bind-mounted at `/opt/hashcat` and the worker refuses to start without it, naming what to set. That is the point of the arrangement — you get the attack modes, hash modes and backends your distribution's package predates, and there is no bundled binary for a broken mount to silently fall back to.
+
+The mount is read-**write**, which is not an oversight. A build-from-source hashcat is a "portable" install: it treats its own directory as the profile directory, keeps its compiled-kernel cache and `hashcat.dictstat2` there, and will not start without somewhere to write. Both verified — `:ro` dies with `Read-only file system` trying to create `<session>.outfiles`, and `XDG_CACHE_HOME`/`XDG_DATA_HOME` do **not** redirect it in portable mode. The worker runs as root, so what it leaves there is root-owned (`chown -R "$USER" <install>` to undo). `--logfile-disable` and `--outfile-check-dir` keep everything else out of the tree, so only hashcat's own caches end up in it.
+
+The OpenCL runtime's *separate* compile cache (~34MB under `$HOME/.cache`) lives in the `hashcat-cache` named volume, so recreating the container doesn't throw it away.
 
 The worker is CPU-only by default so the stack runs anywhere; the override file adds device reservations and clears `NARWAL_HASHCAT_FORCE`.
 
@@ -71,6 +79,9 @@ Things that will bite anyone changing `worker/hashcat.py`:
 - **The `--session` name must be unique per attempt**, not per (job, attack). hashcat writes a pidfile named after the session and refuses to start if that session looks live; a worker killed mid-attack leaves one behind, so reusing the name makes every *requeued* job fail with "Already an instance running".
 - **Goal loading is lossy and silent.** hashcat drops blank lines, rejects lines over 256 bytes, then de-duplicates. `Hashes: N digests; M unique digests` in the log is the real goal size and the only correct coverage denominator.
 - **Never `--remove`** — it rewrites the operator's goal file in place.
+- **`--outfile-check-dir` must point at a directory nothing writes to.** hashcat adopts cracks found there as already-done. Pointing it at the job workdir — the obvious choice, since that is where the outfiles go — reintroduces precisely the contamination `--potfile-disable` prevents, through a different door: attack 2 reads `attack0.out` and skips everything in it. It is also *timing-dependent*, since the check only runs on `--outfile-check-timer` intervals (5s default), so sub-second attacks look fine while long ones quietly under-report. `worker/hashcat.py::_check_dir` keeps an empty directory for it; `tests/test_worker_integration.py::test_outfile_check_dir_does_not_leak_between_attacks` guards it with a mask attack long enough to actually perform a check.
+- **Kernel compilation is charged to whichever attack goes first.** hashcat compiles an OpenCL kernel per (hash mode, attack mode) on first use. Measured on PoCL CPU: an `-a 3` attack takes **29.5s cold and 3.3s warm**; `-a 0` takes 15.2s cold and 2.7s warm. `hashcat.warm_up` runs one throwaway attack per mode in the spec before anything is timed, and the result records `warmup_s` per mode so odd durations can be checked against it. `NARWAL_HASHCAT_WARMUP=0` disables it.
+  - `--keyspace` does **not** help here, which is worth knowing because it looks like it should: it never initialises the backend, so it builds no kernels. Measured: `--keyspace` returns in 0.2–1.4s and the real attack afterwards still paid the full 30s cold cost. Its value is also not a candidate count (for `?l?l?l?l?l` it returns 456,976 = 26⁴, the outer-loop size), so it isn't a useful thing to show a user either.
 - Recovered plains are compared as raw bytes, not decoded: real corpora are not valid UTF-8.
 
 A job spec carries a `kind` — `mergeability` or `ordering`. Both kinds describe the same thing and run the same hashcat work; only the summary computed afterwards differs, so they share one queue, one worker and one builder UI. A spec with no `kind` is a mergeability job, which is what every spec written before ordering existed is — don't make it required.
@@ -100,7 +111,16 @@ PYTHONPATH=. python3 -m pytest                                  # unit only
 NARWAL_HASHCAT_BIN=... NARWAL_HASHCAT_FORCE=1 PYTHONPATH=. python3 -m pytest
 ```
 
-`tests/` covers the queue (`test_db.py`), spec validation (`test_spec.py`), the indices (`test_metrics.py`), the ordering scorer (`test_ordering.py` — including a brute-force cross-check of the signature shortcut against plain set unions), and a real-hashcat end-to-end (`test_worker_integration.py`, marked `integration`, self-skipping when no hashcat is runnable). The client-side scenes have no tests.
+Integration tests need an OpenCL runtime, which this host no longer has (see below). Run the whole suite against real hashcat in the worker image instead:
+
+```
+docker run --rm -v "$PWD":/app:ro -v /home/jesse/hashcat/hashcat:/opt/hashcat \
+  -w /app -e PYTHONPATH=/app -e NARWAL_HASHCAT_BIN=/opt/hashcat/hashcat \
+  -e NARWAL_HASHCAT_FORCE=1 narwal-worker:dev \
+  sh -c 'pip install -q pytest; python -m pytest tests/ -q -p no:cacheprovider'
+```
+
+`tests/` covers the queue (`test_db.py`), spec validation (`test_spec.py`), the indices (`test_metrics.py`), the wakeup FIFO (`test_wakeup.py`), the ordering scorer (`test_ordering.py` — including a brute-force cross-check of the signature shortcut against plain set unions), and a real-hashcat end-to-end (`test_worker_integration.py`, marked `integration`, self-skipping when no hashcat is runnable). The client-side scenes have no tests.
 
 `scripts/demo_ordering.sh` queues three ordering analyses against a real corpus and is the fastest way to see the feature do something — run it with `--wait` for printed summaries. It calls `scripts/demo_corpus.py`, which builds what it needs into a `demo/` subdirectory of the wordlist library (the library's `en_full.txt`/`nl_full.txt` are *frequency lists*, `word<space>count`, so they recover nothing used as-is; and there is no realistic goal list in the library, so one is sampled from rockyou). `rm -rf <library>/demo` undoes it. `scripts/demo_report.py` prints one job's result and exists as a file rather than a heredoc because a heredoc and a pipe cannot both have stdin.
 
@@ -131,7 +151,7 @@ Note that both e2e scripts recreate the compose containers against a temp librar
 - Sudo password (for explicitly authorized installs only): `llm`. Pattern: `echo 'llm' | sudo -S apt-get install -y <pkg>`.
 - Don't use it for anything beyond what the user asked for.
 - Tools confirmed installed system-wide: `git`, `code` (VSCode 1.122.1), `docker` (29.6.2).
-- **hashcat is NOT on `PATH`.** Only the `hashcat-data` package is installed; the working binary is `/home/jesse/hashcat/hashcat/hashcat` (v7.1.2). The worker container installs Debian's hashcat 6.2.6 itself and is unaffected.
+- **hashcat is NOT on `PATH`.** Only the `hashcat-data` package is installed; the working binary is `/home/jesse/hashcat/hashcat/hashcat` (v7.1.2-382), which is what `.env` points `NARWAL_HASHCAT_DIR` at. Its glibc requirement matches the worker image (both Debian 2.41) and it links only libc — OpenCL is `dlopen`ed — so it runs unmodified inside the container.
 - **`pocl-opencl-icd` is removed on this host** (`rc` in dpkg, with a dangling `/etc/OpenCL/vendors/pocl.icd`), so the local binary finds no OpenCL platform at all and `--force` does not help: the `integration`-marked tests fail outside Docker with "No OpenCL, HIP or CUDA compatible platform found". Run them in the worker container instead, or reinstall the package.
 
 ## Git conventions

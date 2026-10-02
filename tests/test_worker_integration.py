@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import os
 import shutil
+from pathlib import Path
 
 import pytest
 
@@ -61,6 +62,9 @@ def env(tmp_path, monkeypatch, hashcat_bin):
     (library / "wl_b.txt").write_text("\n".join(WL_B) + "\n")
 
     runs = tmp_path / "runs"
+    # Warm-up is an optimisation, not behaviour these tests are about, and it
+    # costs a kernel compile per attack mode. One test below turns it back on.
+    monkeypatch.setattr(config, "hashcat_warmup", False)
     monkeypatch.setattr(config, "wordlists_root", library.resolve())
     monkeypatch.setattr(config, "wordlists_pattern", None)
     monkeypatch.setattr(config, "rules_root", None)
@@ -281,4 +285,112 @@ def test_ordering_job_end_to_end(env):
     assert r["best"]["steps"][-1]["cumulative"] == 4
     assert r["best"]["efficiency"] >= r["worst"]["efficiency"]
     assert r["greedy"]["efficiency"] <= r["best"]["efficiency"] + 1e-12
+    conn.close()
+
+
+def test_warm_up_takes_the_kernel_compile_out_of_the_measurement(env, monkeypatch):
+    """The reason warm-up exists.
+
+    hashcat compiles an OpenCL kernel the first time it sees a given attack
+    mode. Without a warm-up that cost is charged to whichever attack used the
+    mode first, and an ordering job schedules against exactly those durations.
+    Here both attacks are the same wordlist against the same goal list, so
+    their true costs are identical — any large gap between them is compilation,
+    not work.
+    """
+    from worker import main as worker_main
+
+    monkeypatch.setattr(config, "hashcat_warmup", True)
+
+    conn = db.connect()
+    db.init(conn)
+    job_id = db.enqueue(conn, {
+        "kind": "ordering",
+        "goal": "goal.txt",
+        "attacks": [
+            {"label": "first", "mode": "wordlist", "wordlist": "wl_a.txt"},
+            {"label": "second", "mode": "wordlist", "wordlist": "wl_a.txt"},
+        ],
+    })
+
+    worker_main.process_one(conn)
+    job = db.get(conn, job_id)
+    assert job["status"] == "done", job["error"]
+    r = job["result"]
+
+    # The warm-up ran, and is reported separately from the measured durations.
+    assert "wordlist" in r["warmup_s"]
+    assert r["warmup_s"]["wordlist"] > 0
+
+    first, second = (a["duration_s"] for a in r["attacks"])
+    assert first == pytest.approx(second, rel=0.6), (
+        f"identical attacks measured {first:.1f}s and {second:.1f}s — the first "
+        f"one still looks like it absorbed a kernel compile"
+    )
+    conn.close()
+
+
+def test_hashcat_writes_nothing_into_the_install_directory(env):
+    """The install is the operator's, and is bind-mounted from the host.
+
+    A build-from-source hashcat treats its own directory as the profile
+    directory, so without --outfile-check-dir and --logfile-disable it drops a
+    <session>.outfiles directory and a hashcat.log in there on every run. Its
+    own caches (kernels/, hashcat.dictstat2) are fine and expected.
+    """
+    import shutil
+    from worker import main as worker_main
+
+    install = shutil.which(config.hashcat_bin)
+    if install is None:
+        pytest.skip("hashcat is not on PATH; nothing to check containment against")
+    install_dir = Path(install).resolve().parent
+    before = {p.name for p in install_dir.iterdir()}
+
+    conn = db.connect()
+    db.init(conn)
+    db.enqueue(conn, SPEC)
+    worker_main.process_one(conn)
+    conn.close()
+
+    new = {p.name for p in install_dir.iterdir()} - before
+    stray = {n for n in new if n.endswith(".outfiles") or n == "hashcat.log"}
+    assert not stray, f"hashcat littered the operator's install: {sorted(stray)}"
+
+
+def test_outfile_check_dir_does_not_leak_between_attacks(env):
+    """--outfile-check-dir must not see our own outfiles.
+
+    hashcat adopts cracks found in that directory as already-done. If it points
+    at the job workdir, attack 2 reads attack 1's `attack0.out` and skips
+    everything in it — the same contamination --potfile-disable prevents, just
+    through a different door.
+
+    The mask attack here is the one that matters: the check only runs on
+    --outfile-check-timer intervals (5s by default), so a sub-second wordlist
+    attack never performs one and would pass even while the bug was present.
+    `sixlower` runs long enough to check at least once.
+    """
+    from worker import main as worker_main
+
+    conn = db.connect()
+    db.init(conn)
+    job_id = db.enqueue(conn, {
+        "goal": "goal.txt",
+        "attacks": [
+            # Runs first and writes abcdef into the workdir...
+            {"label": "dict", "mode": "wordlist", "wordlist": "wl_a.txt"},
+            # ...which this must still find for itself.
+            {"label": "sixlower", "mode": "mask", "mask": "?l?l?l?l?l?l"},
+        ],
+    })
+
+    worker_main.process_one(conn)
+    job = db.get(conn, job_id)
+    assert job["status"] == "done", job["error"]
+
+    by_label = {a["label"]: a for a in job["result"]["attacks"]}
+    # zzzzzz and abcdef. abcdef is the one `dict` already wrote out.
+    assert by_label["sixlower"]["recovered"] == 2
+    assert job["result"]["pairs"][0]["shared"] == 1
     conn.close()

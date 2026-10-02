@@ -26,14 +26,31 @@ worker/). Both the API container and the worker container import this module,
 so they agree on where the queue lives:
 
   NARWAL_RUNS_DIR        Read-write directory holding narwal.db (the SQLite
-                         queue) and one subdirectory of hashcat artifacts per
-                         job. Defaults to `runs/` at the repo root. This is
-                         the ONLY path the app writes to.
+                         queue), the wakeup FIFO the API uses to nudge the
+                         worker, and one subdirectory of hashcat artifacts per
+                         job. Defaults to `runs/` at the repo root. Apart from
+                         hashcat's own caches under the hashcat install, this
+                         is the only path the app writes to.
   NARWAL_RULES_DIR       Directory that a job's rule files must live under.
-                         Defaults to hashcat's own /usr/share/hashcat/rules
-                         when that exists. Attack wordlists come from
+                         Defaults to the `rules/` directory of whatever hashcat
+                         NARWAL_HASHCAT_BIN points at, then to
+                         /usr/share/hashcat/rules. Attack wordlists come from
                          NARWAL_WORDLISTS_DIR instead.
-  NARWAL_HASHCAT_BIN     hashcat executable. Default `hashcat` (on PATH).
+  NARWAL_HASHCAT_BIN     hashcat executable. Default `hashcat` (on PATH). The
+                         worker image no longer ships one — point this at your
+                         own build, which is also how you get attack modes a
+                         distribution hashcat does not have. Under Docker the
+                         tree is bind-mounted at /opt/hashcat; see
+                         docker-compose.yml and .env.example.
+  NARWAL_HASHCAT_WARMUP  "0" to skip the pre-measurement warm-up run. On by
+                         default, and worth leaving on: hashcat compiles an
+                         OpenCL kernel per attack mode on first use, and that
+                         one-time cost otherwise lands inside the measured
+                         duration of whichever attack happens to use that mode
+                         first — which is exactly the number an ordering job
+                         schedules against. Measured on this host's PoCL CPU
+                         runtime: an -a 3 attack takes 29.5s cold and 3.3s
+                         warm.
   NARWAL_HASHCAT_FORCE   "1" to pass --force. Needed on hosts whose only
                          OpenCL device is a PoCL CPU runtime that hashcat
                          rejects as outdated — without it hashcat exits with
@@ -48,6 +65,7 @@ from __future__ import annotations
 import os
 import re
 import shlex
+import shutil
 from pathlib import Path
 
 _ROOT = Path(__file__).resolve().parents[1]
@@ -82,15 +100,36 @@ wordlists_pattern: re.Pattern | None = re.compile(_regex) if _regex else None
 
 runs_dir: Path = Path(os.environ.get("NARWAL_RUNS_DIR", "").strip() or _ROOT / "runs").resolve()
 
-_rules = os.environ.get("NARWAL_RULES_DIR", "").strip()
-_default_rules = Path("/usr/share/hashcat/rules")
-rules_root: Path | None = Path(_rules).resolve() if _rules else _default_rules
-if rules_root is not None and not rules_root.is_dir():
-    rules_root = None
-
 hashcat_bin: str = os.environ.get("NARWAL_HASHCAT_BIN", "").strip() or "hashcat"
 hashcat_force: bool = os.environ.get("NARWAL_HASHCAT_FORCE", "").strip() in ("1", "true", "yes")
 hashcat_extra: list[str] = shlex.split(os.environ.get("NARWAL_HASHCAT_EXTRA", "").strip())
+hashcat_warmup: bool = os.environ.get("NARWAL_HASHCAT_WARMUP", "1").strip() not in ("0", "false", "no")
+
+
+def hashcat_home() -> Path | None:
+    """Directory of the hashcat install, resolved through PATH if need be.
+
+    A hashcat built from source keeps its rules, masks and charsets next to the
+    binary (and, being a "portable" install, writes its kernel cache there too
+    — which is why the bind mount in docker-compose.yml is read-write).
+    """
+    resolved = shutil.which(hashcat_bin)
+    return Path(resolved).resolve().parent if resolved else None
+
+
+def _default_rules_root() -> Path | None:
+    """hashcat's own rules directory: the custom install's first, then the
+    distribution location a system hashcat would use."""
+    home = hashcat_home()
+    candidates = [home / "rules"] if home else []
+    candidates.append(Path("/usr/share/hashcat/rules"))
+    return next((c for c in candidates if c.is_dir()), None)
+
+
+_rules = os.environ.get("NARWAL_RULES_DIR", "").strip()
+rules_root: Path | None = Path(_rules).resolve() if _rules else _default_rules_root()
+if rules_root is not None and not rules_root.is_dir():
+    rules_root = None
 
 
 def db_path() -> Path:

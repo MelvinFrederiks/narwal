@@ -43,8 +43,18 @@ curl -sf "$API/healthz" >/dev/null || { echo "no stack at $API — docker compos
 echo "== building the demo corpus (idempotent)"
 PYTHONPATH=. python3 scripts/demo_corpus.py
 
+# Rules come from whatever hashcat NARWAL_HASHCAT_BIN points at, so the name
+# depends on the version: hashcat 7 renamed best64.rule to best66.rule. Ask the
+# API which one this install actually has rather than guessing.
+RULE=$(curl -sf "$API/api/jobs/config" | python3 -c '
+import json, sys
+rules = json.load(sys.stdin)["rules"]
+print(next((r for r in ("best66.rule", "best64.rule") if r in rules), ""))')
+[ -n "$RULE" ] || { echo "neither best66.rule nor best64.rule in this hashcat install"; exit 1; }
+echo "   using rule file: $RULE"
+
 post() {  # post <name> <attacks-json>
-  local name="$1" attacks="$2" id
+  local name="$1" attacks="${2//RULE_PLACEHOLDER/$RULE}" id
   id=$(curl -sf -X POST "$API/api/jobs" -H 'Content-Type: application/json' \
        -d "{\"name\": \"$name\", \"spec\": {\"kind\": \"ordering\",
             \"goal\": \"demo/goal_rockyou.txt\", \"attacks\": $attacks}}" \
@@ -61,17 +71,17 @@ JOB1=$(post "Demo 1 — the full lineup" '[
   {"label":"brute 7 lower","mode":"mask","mask":"?l?l?l?l?l?l?l"},
   {"label":"common 815","mode":"wordlist","wordlist":"common_passwords_win.txt"},
   {"label":"en+nl dictionary","mode":"wordlist","wordlist":"demo/en_nl_words.txt"},
-  {"label":"tokens + best64","mode":"wordlist","wordlist":"demo/rockyou_tokens.txt","rules":["best64.rule"]},
+  {"label":"tokens + rules","mode":"wordlist","wordlist":"demo/rockyou_tokens.txt","rules":["RULE_PLACEHOLDER"]},
   {"label":"digits 1-8","mode":"mask","mask":"?d?d?d?d?d?d?d?d","increment_min":1,"increment_max":8},
   {"label":"rockyou alpha","mode":"wordlist","wordlist":"rockyou.alpha"}
 ]')
 echo "  1. the full lineup      $API/#ordering/$JOB1"
 
-# 2. best64.rule starts with ":" (the identity rule), so "tokens + best64"
+# 2. best64/best66 starts with ":" (the identity rule), so "tokens + rules"
 #    generates every candidate "tokens" does and ~76 more per word.
 JOB2=$(post "Demo 2 — dictionary vs rules" '[
   {"label":"tokens","mode":"wordlist","wordlist":"demo/rockyou_tokens.txt"},
-  {"label":"tokens + best64","mode":"wordlist","wordlist":"demo/rockyou_tokens.txt","rules":["best64.rule"]},
+  {"label":"tokens + rules","mode":"wordlist","wordlist":"demo/rockyou_tokens.txt","rules":["RULE_PLACEHOLDER"]},
   {"label":"digits 1-8","mode":"mask","mask":"?d?d?d?d?d?d?d?d","increment_min":1,"increment_max":8}
 ]')
 echo "  2. dictionary vs rules  $API/#ordering/$JOB2"

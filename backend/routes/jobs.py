@@ -15,7 +15,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Body, HTTPException
 
 from .. import config
-from ..jobs import db, ordering, spec as spec_mod
+from ..jobs import db, ordering, wakeup, spec as spec_mod
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
@@ -68,9 +68,14 @@ def create_job(payload: dict = Body(...)) -> dict:
     conn = _conn()
     try:
         job_id = db.enqueue(conn, payload["spec"], name=name)
-        return {"id": job_id, "status": "queued"}
     finally:
         conn.close()
+
+    # Nudge the worker so it starts now instead of on its next housekeeping
+    # pass. Best-effort by design: the job is already committed to the queue,
+    # and a worker that misses this finds it anyway.
+    wakeup.notify()
+    return {"id": job_id, "status": "queued"}
 
 
 @router.get("")

@@ -23,6 +23,9 @@ services:
     volumes:
       - ./backend:/app/backend
       - ./web:/app/web
+      # The hashcat install, so /api/jobs/config can list its rule files. The
+      # API never executes it.
+      - ${NARWAL_HASHCAT_DIR:-./data}:/opt/hashcat:ro
       # Optional read-only "server wordlists" library — see .env.example.
       # NARWAL_WORDLISTS_DIR (host path, set in .env) is mounted at the fixed
       # container path /mnt/wordlists, which the `environment:` block below
@@ -38,6 +41,7 @@ services:
       - NARWAL_WORDLISTS_DIR=/mnt/wordlists
       - NARWAL_WORDLISTS_REGEX=${NARWAL_WORDLISTS_REGEX:-}
       - NARWAL_RUNS_DIR=/runs
+      - NARWAL_HASHCAT_BIN=/opt/hashcat/hashcat
     restart: unless-stopped
 
   narwal-worker:
@@ -53,16 +57,39 @@ services:
       # sees — a job stores wordlist paths relative to this directory.
       - ${NARWAL_WORDLISTS_DIR:-./data}:/mnt/wordlists:ro
       - ${NARWAL_RUNS_HOST_DIR:-./runs}:/runs
+      # Your own hashcat install. Read-WRITE on purpose: a hashcat built from
+      # source is a "portable" install, so it keeps its compiled-kernel cache
+      # and its wordlist line-count cache (hashcat.dictstat2) next to the
+      # binary and refuses to run without somewhere to write. Mounting it :ro
+      # fails immediately with "Read-only file system", and XDG_CACHE_HOME does
+      # not redirect it — both verified. Keeping the cache on the host is also
+      # what stops every container restart from recompiling kernels.
+      - ${NARWAL_HASHCAT_DIR:-./data}:/opt/hashcat
+      # The OpenCL runtime's own compile cache. hashcat caches its kernels in
+      # the install directory above (so those already survive), but PoCL/NVIDIA
+      # keep a separate ~34MB cache of their own under $HOME/.cache, and
+      # without this a `docker compose up --build` throws it away and the next
+      # job recompiles from scratch — tens of seconds per attack mode.
+      - hashcat-cache:/root/.cache
     environment:
       - NARWAL_WORDLISTS_DIR=/mnt/wordlists
       - NARWAL_WORDLISTS_REGEX=${NARWAL_WORDLISTS_REGEX:-}
       - NARWAL_RUNS_DIR=/runs
+      - NARWAL_HASHCAT_BIN=/opt/hashcat/hashcat
       # hashcat refuses to run on an OpenCL device it considers outdated, which
       # is exactly what the PoCL CPU runtime is. --force is how you say "yes,
       # I know this is a CPU". Turn it off (NARWAL_HASHCAT_FORCE=) when running
       # against a real GPU, where the warning would be worth heeding.
       - NARWAL_HASHCAT_FORCE=${NARWAL_HASHCAT_FORCE:-1}
       - NARWAL_HASHCAT_EXTRA=${NARWAL_HASHCAT_EXTRA:-}
+      # Run one throwaway attack per attack mode before the measured ones, so
+      # hashcat's one-time kernel compilation does not land inside the duration
+      # an ordering job schedules against. See backend/config.py.
+      - NARWAL_HASHCAT_WARMUP=${NARWAL_HASHCAT_WARMUP:-1}
+      # Seconds the idle worker blocks for before waking to do housekeeping.
+      # It is woken immediately when a job is enqueued (backend/jobs/wakeup.py),
+      # so this is a fallback, not the latency a user sees.
+      - NARWAL_WORKER_IDLE=${NARWAL_WORKER_IDLE:-30}
       # Seconds without a heartbeat before a job is assumed abandoned and
       # requeued. Must stay comfortably above the ~1s heartbeat interval.
       - NARWAL_WORKER_STALE=${NARWAL_WORKER_STALE:-120}
@@ -70,3 +97,9 @@ services:
     restart: unless-stopped
     depends_on:
       - narwal
+
+volumes:
+  # Not bind-mounted: this is a derived cache, keyed to the container's OpenCL
+  # runtime, and nothing outside the worker has any use for it. `docker compose
+  # down -v` drops it and the next job just pays the compile once more.
+  hashcat-cache:
