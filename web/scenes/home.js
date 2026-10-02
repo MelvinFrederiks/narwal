@@ -43,6 +43,14 @@ const SCENES = [
     text: "Craft an attack and see how well it performs against a wordlist of your choice. Find " +
       "redundancies and optimizations. Queue up analyses and come back later when they are done."
   },
+  {
+    id: "ordering",
+    label: "Attack order",
+    text: "Already know which attacks you want to run? This works out the sequence that recovers " +
+      "passwords soonest. Every permutation is scored exhaustively, off one hashcat run per attack — " +
+      "the total haul and total runtime are the same whichever order you pick, but how early you " +
+      "get there is not.",
+  },
 ];
 
 function formatBytes(n) {

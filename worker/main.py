@@ -1,4 +1,4 @@
-"""Worker loop: claim a mergeability job, run its attacks, write the result.
+"""Worker loop: claim a job, run its attacks, write the result.
 
 Run it with `python -m worker.main` from the repo root (PYTHONPATH=.), which
 is what worker/Dockerfile does. It needs no network — the queue is the SQLite
@@ -10,6 +10,16 @@ recovered sets are then compared. Running them separately is the whole point:
 the question is what attack B finds that attack A did not, which is only
 answerable if B never got to see A's results (see --potfile-disable in
 worker/hashcat.py).
+
+Two kinds of job come off the same queue and the hashcat half is identical for
+both — only the summary computed from the recovered sets differs:
+
+  · `mergeability` compares every pair (backend/jobs/metrics.py).
+  · `ordering` scores every permutation of the attacks by how early in the
+    sequence passwords turn up (backend/jobs/ordering.py). It needs no extra
+    hashcat work: an attack's recovered set and its runtime do not depend on
+    its position, precisely because the potfile is disabled, so N runs are
+    enough to score all N! orderings exactly.
 
 Interruption is safe at any point. A job killed mid-run stays `running` with a
 heartbeat that goes stale, and db.requeue_stale puts it back on the queue for
@@ -28,7 +38,7 @@ import time
 import uuid
 
 from backend import config
-from backend.jobs import db, metrics
+from backend.jobs import db, metrics, ordering
 from backend.jobs import spec as spec_mod
 
 from . import hashcat
@@ -62,17 +72,16 @@ def _sample(words: set[bytes], limit: int = SAMPLE_SIZE) -> list[str]:
     return [w.decode("utf-8", "replace") for w in sorted(words)[:limit]]
 
 
-def run_job(conn, job: dict) -> dict:
-    job_id = job["id"]
-    # Re-validated here, not trusted from the queue: config can change between
-    # enqueue and claim, and anything with the volume mounted can write the DB.
-    spec = spec_mod.validate(job["spec"])
+def _run_attacks(conn, job_id: str, spec: spec_mod.JobSpec) -> list[hashcat.AttackRun]:
+    """Run every attack in the spec against the full goal list, in spec order.
 
+    Shared by both job kinds — the sequence the attacks happen to be run in
+    here has no bearing on either summary, since each one sees the whole goal
+    list and none of them sees another's results.
+    """
     workdir = config.job_dir(job_id)
     workdir.mkdir(parents=True, exist_ok=True)
 
-    started = time.time()
-    recovered: dict[str, set[bytes]] = {}
     runs: list[hashcat.AttackRun] = []
     total = len(spec.attacks)
 
@@ -121,11 +130,23 @@ def run_job(conn, job: dict) -> dict:
             )
 
         runs.append(run)
-        recovered[attack.label] = run.recovered
         log.info(
-            "job %s: attack %d/%d recovered %d of %d",
-            job_id, index + 1, total, len(run.recovered), run.goal_loaded,
+            "job %s: attack %d/%d recovered %d of %d in %.1fs",
+            job_id, index + 1, total, len(run.recovered), run.goal_loaded, run.duration_s,
         )
+
+    return runs
+
+
+def run_job(conn, job: dict) -> dict:
+    job_id = job["id"]
+    # Re-validated here, not trusted from the queue: config can change between
+    # enqueue and claim, and anything with the volume mounted can write the DB.
+    spec = spec_mod.validate(job["spec"])
+
+    started = time.time()
+    runs = _run_attacks(conn, job_id, spec)
+    recovered = {r.label: r.recovered for r in runs}
 
     # Every attack read the same goal file, so these should agree; take the
     # max so a run that exited before printing its summary cannot shrink the
@@ -133,7 +154,12 @@ def run_job(conn, job: dict) -> dict:
     goal_size = max((r.goal_loaded for r in runs), default=0)
     goal_rejected = max((r.goal_rejected for r in runs), default=0)
 
-    result = metrics.summarise(recovered, goal_size)
+    if spec.kind == "ordering":
+        result = ordering.summarise(
+            recovered, {r.label: r.duration_s for r in runs}, goal_size
+        )
+    else:
+        result = metrics.summarise(recovered, goal_size)
 
     by_label = {r.label: r for r in runs}
     for entry in result["attacks"]:
@@ -150,13 +176,14 @@ def run_job(conn, job: dict) -> dict:
 
     # What each side of a pair uniquely contributes — the concrete answer to
     # "what would running the second attack as well actually get me?".
-    for pair in result["pairs"]:
+    for pair in result.get("pairs", ()):
         a, b = recovered[pair["a"]], recovered[pair["b"]]
         pair["sample_only_a"] = _sample(a - b)
         pair["sample_only_b"] = _sample(b - a)
 
     partial = any(r.partial for r in runs)
     result.update(
+        kind=spec.kind,
         goal=str(spec.goal.relative_to(config.wordlists_root)),
         goal_rejected=goal_rejected,
         partial=partial,
@@ -172,6 +199,15 @@ def run_job(conn, job: dict) -> dict:
             "(max_runtime_s), so its recovered set is a lower bound and the "
             "indices below understate the true overlap."
         )
+        if spec.kind == "ordering":
+            # Worse here than for mergeability: a capped attack's duration is
+            # the cap rather than its real cost, so the ranking is scheduling
+            # against a runtime that would not hold in a real run.
+            result["partial_note"] += (
+                " A capped attack also reports the cap as its duration instead of "
+                "what it would really cost, so the ordering below is only valid "
+                "for runs under the same cap."
+            )
     return result
 
 
@@ -197,9 +233,12 @@ def process_one(conn) -> bool:
         db.fail(conn, job_id, str(err))
     else:
         db.complete(conn, job_id, result)
+        extra = ""
+        if result.get("kind") == "ordering":
+            extra = f" — best order {' → '.join(result['best']['order'])}"
         log.info(
-            "job %s: done in %.1fs — combined coverage %.1f%%",
-            job_id, result["duration_s"], result["combined_coverage"] * 100,
+            "job %s: done in %.1fs — combined coverage %.1f%%%s",
+            job_id, result["duration_s"], result["combined_coverage"] * 100, extra,
         )
     return True
 

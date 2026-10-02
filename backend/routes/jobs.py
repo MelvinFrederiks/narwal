@@ -1,4 +1,4 @@
-"""Mergeability job queue API.
+"""Job queue API — mergeability and attack-ordering analyses.
 
 Create a job, poll it, read the result. This router never runs hashcat and
 never touches a wordlist's contents — it validates the spec, writes a row, and
@@ -15,7 +15,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Body, HTTPException
 
 from .. import config
-from ..jobs import db, spec as spec_mod
+from ..jobs import db, ordering, spec as spec_mod
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
@@ -44,8 +44,12 @@ def job_config() -> dict:
     return {
         "enabled": config.wordlists_root is not None,
         "modes": sorted(spec_mod.MODES),
+        "kinds": list(spec_mod.KINDS),
         "rules": rules,
         "max_attacks": spec_mod.MAX_ATTACKS,
+        # An ordering job enumerates every permutation, so its own cap is
+        # lower (or equal) and the builder has to know which one applies.
+        "max_ordering_attacks": min(spec_mod.MAX_ATTACKS, ordering.MAX_ORDER_ATTACKS),
         "max_rules": spec_mod.MAX_RULES,
     }
 

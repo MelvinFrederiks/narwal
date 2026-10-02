@@ -215,3 +215,70 @@ def test_cancelling_a_running_job(env, monkeypatch):
     worker_main.process_one(conn)
     assert db.get(conn, job_id)["status"] == "cancelled"
     conn.close()
+
+
+def test_ordering_job_end_to_end(env):
+    """An ordering job off the same queue and the same hashcat runs.
+
+    Three attacks whose recovered sets are checkable by eye: `dict` finds
+    {password, hunter2, abcdef}, `sixlower` finds {zzzzzz, abcdef}, and
+    `subset` finds only {abcdef} — which `dict` and `sixlower` both already
+    cover, so wherever it lands it contributes nothing.
+    """
+    from worker import main as worker_main
+
+    library = config.wordlists_root
+    (library / "wl_c.txt").write_text("abcdef\n")
+
+    conn = db.connect()
+    db.init(conn)
+    job_id = db.enqueue(conn, {
+        "kind": "ordering",
+        "goal": "goal.txt",
+        "attacks": [
+            {"label": "dict", "mode": "wordlist", "wordlist": "wl_a.txt"},
+            {"label": "sixlower", "mode": "mask", "mask": "?l?l?l?l?l?l"},
+            {"label": "subset", "mode": "wordlist", "wordlist": "wl_c.txt"},
+        ],
+    }, name="ordering integration")
+
+    assert worker_main.process_one(conn) is True
+    job = db.get(conn, job_id)
+    assert job["status"] == "done", job["error"]
+    r = job["result"]
+
+    assert r["kind"] == "ordering"
+    assert "pairs" not in r                   # that is the other kind's summary
+    assert r["permutations_scored"] == 6      # 3!
+    assert r["goal_size"] == 6
+    assert r["combined_recovered"] == 4       # password, hunter2, abcdef, zzzzzz
+
+    by_label = {a["label"]: a for a in r["attacks"]}
+    assert by_label["dict"]["recovered"] == 3
+    assert by_label["sixlower"]["recovered"] == 2
+    assert by_label["subset"]["recovered"] == 1
+    assert by_label["subset"]["exclusive"] == 0
+
+    # Real wall-clock timings came back, and they are what the ranking used.
+    assert r["timing_available"] is True
+    assert all(a["duration_s"] > 0 for a in r["attacks"])
+    assert r["total_runtime_s"] == pytest.approx(
+        sum(a["duration_s"] for a in r["attacks"])
+    )
+
+    # The curve is complete and monotonic, and ends on the full haul.
+    cumulative = [s["cumulative"] for s in r["best"]["steps"]]
+    assert len(cumulative) == 3
+    assert cumulative == sorted(cumulative)
+    assert cumulative[-1] == 4
+    assert r["best"]["steps"][-1]["elapsed_s"] == pytest.approx(r["total_runtime_s"])
+
+    # `subset` can never be the only way to a password, so it contributes
+    # nothing wherever it lands after one of the others. Which exact slot it
+    # takes depends on the measured runtimes, so that is not asserted — but the
+    # slow brute force must never open an optimal sequence.
+    assert r["best"]["order"][0] != "sixlower"
+    assert r["best"]["steps"][-1]["cumulative"] == 4
+    assert r["best"]["efficiency"] >= r["worst"]["efficiency"]
+    assert r["greedy"]["efficiency"] <= r["best"]["efficiency"] + 1e-12
+    conn.close()

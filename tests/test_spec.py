@@ -256,3 +256,41 @@ def test_max_runtime_bounds(library, bad):
 
 def test_max_runtime_accepted(library):
     assert spec_mod.validate(base_spec(max_runtime_s=600)).max_runtime_s == 600
+
+
+# ── job kind ────────────────────────────────────────────────────────────────
+
+def test_kind_defaults_to_mergeability(library):
+    """Every spec written before ordering existed omits `kind`, and those are
+    still in the queue — they must keep validating as mergeability jobs."""
+    assert spec_mod.validate(base_spec()).kind == "mergeability"
+
+
+def test_ordering_kind_accepted(library):
+    assert spec_mod.validate(base_spec(kind="ordering")).kind == "ordering"
+
+
+def test_unknown_kind_rejected(library):
+    with pytest.raises(spec_mod.SpecError, match="kind must be one of"):
+        spec_mod.validate(base_spec(kind="raw-hashcat"))
+
+
+def test_ordering_needs_two_attacks(library):
+    with pytest.raises(spec_mod.SpecError, match="at least 2 attacks to sequence"):
+        spec_mod.validate(base_spec(
+            kind="ordering",
+            attacks=[{"label": "only", "mode": "mask", "mask": "?d"}],
+        ))
+
+
+def test_ordering_is_capped_by_the_permutation_limit(library):
+    """The cap is factorial, not arbitrary, and the message has to say so —
+    otherwise the only clue is a job that never finishes."""
+    from backend.jobs.ordering import MAX_ORDER_ATTACKS
+
+    too_many = [
+        {"label": f"a{i}", "mode": "mask", "mask": "?d"}
+        for i in range(MAX_ORDER_ATTACKS + 1)
+    ]
+    with pytest.raises(spec_mod.SpecError, match="every permutation"):
+        spec_mod.validate(base_spec(kind="ordering", attacks=too_many))

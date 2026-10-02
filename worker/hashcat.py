@@ -41,6 +41,7 @@ import queue
 import re
 import subprocess
 import threading
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
@@ -75,6 +76,10 @@ class AttackRun:
     goal_loaded: int = 0        # unique digests hashcat actually loaded
     goal_rejected: int = 0      # lines it refused (over-length, malformed)
     partial: bool = False       # stopped early, so `recovered` is a lower bound
+    # Wall clock for the whole hashcat invocation, goal-file loading included.
+    # Loading is a real cost an operator pays, so it belongs in the number the
+    # ordering analysis schedules against (backend/jobs/ordering.py).
+    duration_s: float = 0.0
     log_path: Path | None = None
 
     @property
@@ -160,6 +165,9 @@ def run_attack(
     argv = build_argv(spec, attack, outfile, session)
     log.info("attack %s: %s", attack.label, " ".join(argv))
 
+    # Monotonic, not wall clock: a duration is what the ordering analysis
+    # divides by, and a clock step must not be able to make it negative.
+    started = time.monotonic()
     proc = subprocess.Popen(
         argv,
         stdout=subprocess.PIPE,
@@ -225,6 +233,7 @@ def run_attack(
     if cancelled:
         _terminate(proc)
     exit_code = proc.wait()
+    duration = time.monotonic() - started
     reader.join(timeout=5)
 
     partial = cancelled or exit_code in PARTIAL_EXITS
@@ -241,6 +250,7 @@ def run_attack(
         goal_loaded=goal_loaded,
         goal_rejected=goal_rejected,
         partial=partial,
+        duration_s=duration,
         log_path=log_path,
     )
 

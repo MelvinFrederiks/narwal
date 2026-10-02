@@ -1,4 +1,10 @@
-"""Validation for a mergeability job spec.
+"""Validation for a job spec — mergeability or attack ordering.
+
+Both kinds describe the same thing (a goal wordlist plus a list of attacks) and
+run the same way (each attack once against the full goal list), so they share
+one spec, one queue and one worker. `kind` only decides which summary the
+worker computes from the recovered sets afterwards. A spec with no `kind` is a
+mergeability job, which is what every spec written before ordering existed is.
 
 This is the trust boundary. A job spec arrives as JSON from a browser and ends
 up as hashcat's argv, so everything here exists to make sure the only things a
@@ -36,6 +42,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .. import config
+from .ordering import MAX_ORDER_ATTACKS
 
 
 class SpecError(ValueError):
@@ -54,6 +61,11 @@ MODES = {
     "hybrid-wm": 6,  # wordlist + mask appended
     "hybrid-mw": 7,  # mask + wordlist appended
 }
+
+# An ordering job scores every permutation of its attacks, so its cap is the
+# factorial one from backend/jobs/ordering.py rather than MAX_ATTACKS.
+KINDS = ("mergeability", "ordering")
+DEFAULT_KIND = "mergeability"
 
 MAX_ATTACKS = 8
 MAX_RULES = 4
@@ -80,6 +92,7 @@ class JobSpec:
     goal: Path
     attacks: tuple[Attack, ...] = ()
     max_runtime_s: int | None = None
+    kind: str = DEFAULT_KIND
 
 
 # ── path resolution ─────────────────────────────────────────────────────────
@@ -259,15 +272,29 @@ def validate(raw: object) -> JobSpec:
     if not isinstance(raw, dict):
         raise SpecError("spec must be an object")
 
+    kind = raw.get("kind") or DEFAULT_KIND
+    if kind not in KINDS:
+        raise SpecError(f"kind must be one of {', '.join(KINDS)}")
+
     goal = _resolve_corpus(raw.get("goal"), "goal wordlist")
 
     attacks_raw = raw.get("attacks")
     if not isinstance(attacks_raw, list):
         raise SpecError("attacks must be a list")
     if len(attacks_raw) < 2:
-        raise SpecError("a mergeability job needs at least 2 attacks to compare")
-    if len(attacks_raw) > MAX_ATTACKS:
-        raise SpecError(f"at most {MAX_ATTACKS} attacks per job")
+        raise SpecError(
+            "an ordering job needs at least 2 attacks to sequence"
+            if kind == "ordering"
+            else "a mergeability job needs at least 2 attacks to compare"
+        )
+    limit = min(MAX_ATTACKS, MAX_ORDER_ATTACKS) if kind == "ordering" else MAX_ATTACKS
+    if len(attacks_raw) > limit:
+        if kind == "ordering" and limit == MAX_ORDER_ATTACKS:
+            raise SpecError(
+                f"an ordering job scores every permutation of its attacks, so it is "
+                f"capped at {limit} ({len(attacks_raw)} given)"
+            )
+        raise SpecError(f"at most {limit} attacks per job")
 
     attacks = tuple(_validate_attack(a, i) for i, a in enumerate(attacks_raw))
 
@@ -280,4 +307,4 @@ def validate(raw: object) -> JobSpec:
         if not isinstance(runtime, int) or isinstance(runtime, bool) or not 1 <= runtime <= 86_400:
             raise SpecError("max_runtime_s must be an integer between 1 and 86400")
 
-    return JobSpec(goal=goal, attacks=attacks, max_runtime_s=runtime)
+    return JobSpec(goal=goal, attacks=attacks, max_runtime_s=runtime, kind=kind)

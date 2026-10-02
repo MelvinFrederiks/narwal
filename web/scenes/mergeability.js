@@ -1,10 +1,11 @@
 // Scene — Mergeability.
 //
-// The one scene that cannot run in the browser. Every other scene compares
-// files that already exist; this one asks what two *attacks* would recover
-// from a goal wordlist, which means expanding rules and masks over a real
-// keyspace. So the work is queued (POST /api/jobs), a hashcat worker picks it
-// up, and the result is fetched back later — the tab can be closed in between.
+// One of the two scenes that cannot run in the browser. Every client-side
+// scene compares files that already exist; this one asks what two *attacks*
+// would recover from a goal wordlist, which means expanding rules and masks
+// over a real keyspace. So the work is queued (POST /api/jobs), a hashcat
+// worker picks it up, and the result is fetched back later — the tab can be
+// closed in between.
 //
 // The metric is the Mergeability Index (arXiv:2504.16651): for attacks A and B
 // with recovered sets S_A and S_B,
@@ -17,11 +18,19 @@
 // the smaller one contributes passwords the larger one misses. Both are shown
 // side by side for exactly that reason.
 //
+// This scene says *whether* to run a second attack. The Attack order scene
+// (ordering.js) takes the attacks as given and says in which sequence — same
+// queue, same hashcat work, different question.
+//
 // Routing: `#mergeability` is the builder, `#mergeability/<job-id>` shows one
 // result — so a finished analysis is a reloadable, shareable URL.
 
 import { listServerFiles } from "../util/serverFiles.js";
 import { vennLayout } from "../util/venn.js";
+import {
+  MODE_LABELS, attackBuilder, attacksToSpec, emptyAttack, jobList,
+  noLibraryHtml, progressText, ago, duration, esc, num, pct,
+} from "../util/jobForm.js";
 
 export const name = "mergeability";
 
@@ -29,21 +38,6 @@ const COLOR_A = "#534AB7"; // mask purple — matches the Overlap scene
 const COLOR_B = "#185FA5"; // info blue
 const R_MAX = 96;
 const POLL_MS = 3000;
-
-const MODE_LABELS = {
-  "wordlist": "Wordlist (+ rules)",
-  "mask": "Mask / brute force",
-  "hybrid-wm": "Hybrid — wordlist + mask",
-  "hybrid-mw": "Hybrid — mask + wordlist",
-};
-
-const STATUS_PILL = {
-  queued: "pill-info",
-  running: "pill-warning",
-  done: "pill-success",
-  failed: "pill-danger",
-  cancelled: "",
-};
 
 export async function render(mount, route = "") {
   const jobId = (route || "").trim();
@@ -73,7 +67,6 @@ export async function render(mount, route = "") {
 
   const setupBox = mount.querySelector("#setup");
   const builderBox = mount.querySelector("#builder");
-  const jobsBox = mount.querySelector("#jobs");
   const resultBox = mount.querySelector("#result");
 
   // `mount` is the persistent #view element, so it can't signal unmount. This
@@ -84,15 +77,6 @@ export async function render(mount, route = "") {
 
   let cfg = { enabled: false, rules: [], max_attacks: 8, max_rules: 4 };
   let files = [];
-  let attacks = [
-    { label: "", mode: "wordlist", wordlist: "", rules: [], mask: "" },
-    { label: "", mode: "mask", wordlist: "", rules: [], mask: "?u?l?l?l?d?d?d?d" },
-  ];
-  let goal = "";
-  let jobName = "";
-  let maxRuntime = "";
-  let submitting = false;
-  let formError = "";
 
   try {
     [cfg, files] = await Promise.all([
@@ -104,262 +88,47 @@ export async function render(mount, route = "") {
     return;
   }
 
+  const jobs = jobList({
+    mount: mount.querySelector("#jobs"),
+    kind: "mergeability",
+    hashPrefix: "mergeability",
+    selectedId: jobId,
+  });
+
   if (!cfg.enabled) {
-    setupBox.innerHTML = `
-      <div class="card warning">
-        <b>No server wordlist library is configured.</b> A mergeability job runs on the server, so
-        its goal list and attack wordlists have to be files the server can already see — they can't
-        be uploaded from the browser like the other scenes' inputs. Set
-        <code>NARWAL_WORDLISTS_DIR</code> in <code>.env</code> and restart; see
-        <code>.env.example</code>.
-      </div>`;
+    setupBox.innerHTML = noLibraryHtml("A mergeability job");
   } else {
-    renderBuilder();
+    attackBuilder({
+      mount: builderBox,
+      cfg, files,
+      prefix: "mg",
+      attacks: [
+        { ...emptyAttack(), mode: "wordlist" },
+        { ...emptyAttack(), mode: "mask", mask: "?u?l?l?l?d?d?d?d" },
+      ],
+      maxAttacks: cfg.max_attacks,
+      colors: [COLOR_A, COLOR_B],
+      hint: "Each attack runs separately against the goal list, then every pair is compared.",
+      onSubmit: submit,
+    }).render();
   }
 
-  renderJobs();
+  jobs.refresh();
   if (jobId) renderResult(jobId);
   poll();
 
-  // ── builder ──────────────────────────────────────────────────────────────
-  function renderBuilder() {
-    const wordlistOpts = files.map((f) => `<option value="${esc(f.path)}">`).join("");
+  async function submit({ name: jobName, goal, maxRuntime, attacks }) {
+    const spec = { kind: "mergeability", goal, attacks: attacksToSpec(attacks) };
+    if (maxRuntime) spec.max_runtime_s = Number(maxRuntime);
 
-    builderBox.innerHTML = `
-      <datalist id="mg-files">${wordlistOpts}</datalist>
-      <div style="display:grid;grid-template-columns:auto 1fr;gap:10px 12px;align-items:center;max-width:720px;margin-bottom:18px">
-        <label for="mg-name" style="font-size:13px;color:var(--text-secondary)">Name</label>
-        <input type="text" id="mg-name" placeholder="optional — e.g. “rockyou vs 8-char corporate”"
-               value="${esc(jobName)}"/>
-        <label for="mg-goal" style="font-size:13px;color:var(--text-secondary)">Goal wordlist</label>
-        <input type="text" id="mg-goal" list="mg-files" placeholder="the passwords you are trying to recover"
-               value="${esc(goal)}"/>
-        <label for="mg-runtime" style="font-size:13px;color:var(--text-secondary)">Time cap</label>
-        <span style="display:flex;gap:8px;align-items:center">
-          <input type="number" id="mg-runtime" min="1" max="86400" style="width:120px"
-                 placeholder="none" value="${esc(maxRuntime)}"/>
-          <span class="sub" style="margin:0;font-size:12px">
-            seconds per attack. An attack stopped by the cap gives a partial — and so understated — result.
-          </span>
-        </span>
-      </div>
-
-      <div style="font-weight:500;margin-bottom:8px">Attacks</div>
-      <div class="card-list" id="mg-attacks">${attacks.map(attackHtml).join("")}</div>
-
-      <div style="display:flex;gap:10px;align-items:center;margin-top:14px;flex-wrap:wrap">
-        <button id="mg-add" ${attacks.length >= cfg.max_attacks ? "disabled" : ""}>+ add attack</button>
-        <button id="mg-submit" class="primary" ${submitting ? "disabled" : ""}>
-          ${submitting ? "queueing…" : "Queue analysis"}
-        </button>
-        <span class="sub" style="margin:0;font-size:12px">
-          Each attack runs separately against the goal list, then every pair is compared.
-        </span>
-      </div>
-      ${formError ? `<div class="card danger" style="margin-top:12px">${esc(formError)}</div>` : ""}
-    `;
-
-    wireBuilder();
-  }
-
-  function attackHtml(a, i) {
-    const needsWordlist = a.mode !== "mask";
-    const needsMask = a.mode !== "wordlist";
-    const ruleOpts = cfg.rules.map((r) => `<option value="${esc(r)}">`).join("");
-    return `
-      <div class="card" data-attack="${i}">
-        <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
-          <span style="width:10px;height:10px;border-radius:50%;flex:0 0 auto;
-                       background:${i === 0 ? COLOR_A : i === 1 ? COLOR_B : "var(--text-tertiary)"}"></span>
-          <input type="text" data-field="label" placeholder="attack ${i + 1}" value="${esc(a.label)}"
-                 style="flex:1;max-width:260px"/>
-          <select data-field="mode" style="max-width:220px">
-            ${Object.entries(MODE_LABELS).map(([v, t]) =>
-              `<option value="${v}"${a.mode === v ? " selected" : ""}>${t}</option>`).join("")}
-          </select>
-          <span style="margin-left:auto">
-            ${attacks.length > 2 ? `<button data-remove="${i}" style="font-size:12px">remove</button>` : ""}
-          </span>
-        </div>
-        <div style="display:grid;grid-template-columns:auto 1fr;gap:8px 12px;align-items:center;font-size:13px">
-          ${needsWordlist ? `
-            <label style="color:var(--text-secondary)">Wordlist</label>
-            <input type="text" data-field="wordlist" list="mg-files" value="${esc(a.wordlist)}"
-                   placeholder="candidate list"/>` : ""}
-          ${a.mode === "wordlist" ? `
-            <label style="color:var(--text-secondary)">Rules</label>
-            <span style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-              <input type="text" data-field="rules" list="mg-rules" value="${esc(a.rules.join(", "))}"
-                     placeholder="optional — comma-separated, e.g. best64.rule" style="flex:1;min-width:200px"/>
-              <datalist id="mg-rules">${ruleOpts}</datalist>
-              <span class="sub" style="margin:0;font-size:11px">max ${cfg.max_rules}</span>
-            </span>` : ""}
-          ${needsMask ? `
-            <label style="color:var(--text-secondary)">Mask</label>
-            <input type="text" data-field="mask" value="${esc(a.mask)}"
-                   placeholder="?u?l?l?l?d?d?d?d" style="font-family:'SF Mono',Menlo,Consolas,monospace"/>` : ""}
-        </div>
-      </div>`;
-  }
-
-  function wireBuilder() {
-    // The form re-renders whenever its shape changes (mode switched, attack
-    // added), so the top-level fields are mirrored into state on every
-    // keystroke rather than read at submit time.
-    const readTop = () => [
-      builderBox.querySelector("#mg-name").value,
-      builderBox.querySelector("#mg-goal").value,
-      builderBox.querySelector("#mg-runtime").value,
-    ];
-    for (const id of ["#mg-name", "#mg-goal", "#mg-runtime"]) {
-      builderBox.querySelector(id)
-        .addEventListener("input", () => { [jobName, goal, maxRuntime] = readTop(); });
-    }
-
-    for (const card of builderBox.querySelectorAll("[data-attack]")) {
-      const i = Number(card.dataset.attack);
-      for (const input of card.querySelectorAll("[data-field]")) {
-        const field = input.dataset.field;
-        input.addEventListener("input", () => {
-          if (field === "rules") {
-            attacks[i].rules = input.value.split(",").map((s) => s.trim()).filter(Boolean);
-          } else {
-            attacks[i][field] = input.value;
-          }
-        });
-        // Changing the mode changes which fields exist, so this one re-renders.
-        if (field === "mode") {
-          input.addEventListener("change", () => {
-            [jobName, goal, maxRuntime] = readTop();
-            attacks[i].mode = input.value;
-            renderBuilder();
-          });
-        }
-      }
-      const rm = card.querySelector("[data-remove]");
-      if (rm) {
-        rm.addEventListener("click", () => {
-          [jobName, goal, maxRuntime] = readTop();
-          attacks.splice(i, 1);
-          renderBuilder();
-        });
-      }
-    }
-
-    builderBox.querySelector("#mg-add").addEventListener("click", () => {
-      [jobName, goal, maxRuntime] = readTop();
-      attacks.push({ label: "", mode: "wordlist", wordlist: "", rules: [], mask: "" });
-      renderBuilder();
+    const res = await fetch("/api/jobs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: jobName, spec }),
     });
-    builderBox.querySelector("#mg-submit").addEventListener("click", submit);
-  }
-
-  function buildSpec() {
-    const spec = { goal: goal.trim(), attacks: [] };
-    if (maxRuntime.trim()) spec.max_runtime_s = Number(maxRuntime);
-    attacks.forEach((a, i) => {
-      const out = { label: a.label.trim() || `attack ${i + 1}`, mode: a.mode };
-      if (a.mode !== "mask") out.wordlist = a.wordlist.trim();
-      if (a.mode !== "wordlist") out.mask = a.mask.trim();
-      if (a.mode === "wordlist" && a.rules.length) out.rules = a.rules;
-      spec.attacks.push(out);
-    });
-    return spec;
-  }
-
-  async function submit() {
-    formError = "";
-    submitting = true;
-    renderBuilder();
-    try {
-      const res = await fetch("/api/jobs", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: jobName.trim(), spec: buildSpec() }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.detail || `server said ${res.status}`);
-      location.hash = `#mergeability/${data.id}`;
-      return; // the hash change re-renders the scene
-    } catch (err) {
-      formError = err.message;
-    } finally {
-      submitting = false;
-      renderBuilder();
-    }
-  }
-
-  // ── job list ─────────────────────────────────────────────────────────────
-  async function renderJobs() {
-    let jobs;
-    try {
-      jobs = (await fetch("/api/jobs").then((r) => r.json())).jobs;
-    } catch {
-      jobsBox.innerHTML = `<div class="card danger">could not list analyses</div>`;
-      return;
-    }
-    if (!jobs.length) {
-      jobsBox.innerHTML = `<div class="sub" style="margin:0">Nothing queued yet.</div>`;
-      return;
-    }
-
-    jobsBox.innerHTML = `
-      <div style="overflow:auto">
-      <table style="border-collapse:collapse;font-size:12px;width:100%;min-width:560px">
-        <thead><tr style="color:var(--text-secondary);text-align:left">
-          <th style="padding:4px 12px 4px 0;font-weight:500">Analysis</th>
-          <th style="padding:4px 12px 4px 0;font-weight:500">Status</th>
-          <th style="padding:4px 12px 4px 0;font-weight:500">Progress</th>
-          <th style="padding:4px 12px 4px 0;font-weight:500">Age</th>
-          <th style="padding:4px 0;font-weight:500"></th>
-        </tr></thead>
-        <tbody>
-          ${jobs.map(jobRowHtml).join("")}
-        </tbody>
-      </table></div>`;
-
-    for (const btn of jobsBox.querySelectorAll("[data-cancel]")) {
-      btn.addEventListener("click", async () => {
-        btn.disabled = true;
-        await fetch(`/api/jobs/${btn.dataset.cancel}`, { method: "DELETE" }).catch(() => {});
-        renderJobs();
-      });
-    }
-  }
-
-  function jobRowHtml(j) {
-    const title = j.name || `${(j.spec?.attacks || []).length} attacks`;
-    const selected = j.id === jobId;
-    return `
-      <tr style="${selected ? "background:var(--surface-2)" : ""}">
-        <td style="padding:5px 12px 5px 0">
-          <a href="#mergeability/${esc(j.id)}" style="color:var(--text);text-decoration:none">
-            <b>${esc(title)}</b>
-            <span class="sub" style="font-size:11px;margin:0"> · ${esc(j.spec?.goal || "")}</span>
-          </a>
-        </td>
-        <td style="padding:5px 12px 5px 0">
-          <span class="pill ${STATUS_PILL[j.status] || ""}">${esc(j.status)}</span>
-        </td>
-        <td style="padding:5px 12px 5px 0;color:var(--text-secondary)">${progressText(j)}</td>
-        <td style="padding:5px 12px 5px 0;color:var(--text-secondary)">${ago(j.created_at)}</td>
-        <td style="padding:5px 0;text-align:right">
-          ${j.status === "queued" || j.status === "running"
-            ? `<button data-cancel="${esc(j.id)}" style="font-size:11px;padding:3px 8px">cancel</button>`
-            : ""}
-        </td>
-      </tr>`;
-  }
-
-  function progressText(j) {
-    if (j.status === "failed") return `<span class="error">${esc(truncate(j.error || "failed", 70))}</span>`;
-    if (j.status !== "running") return "—";
-    const p = j.progress;
-    if (!p) return "starting…";
-    const which = `attack ${(p.attack_index ?? 0) + 1}/${p.attack_count ?? "?"}`;
-    const s = p.status;
-    if (!s || !s.total) return `${which} — loading`;
-    return `${which} — ${pct(s.fraction, 1)}%`;
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || `server said ${res.status}`);
+    location.hash = `#mergeability/${data.id}`; // the hash change re-renders the scene
   }
 
   // ── result ───────────────────────────────────────────────────────────────
@@ -432,6 +201,10 @@ export async function render(mount, route = "") {
           doubles the yield. <b>Jaccard</b> is plain similarity, shared ÷ union — a pair can
           score low on Jaccard and still be worth merging, which is the whole point of
           measuring both.
+        </div>
+        <div class="sub" style="margin-top:10px">
+          Decided to run them all? <a href="#ordering">Attack order</a> scores every sequence of
+          the same attacks by how early in the run it recovers passwords.
         </div>
 
         <div id="pair-detail"></div>
@@ -572,48 +345,11 @@ export async function render(mount, route = "") {
   function poll() {
     setTimeout(async () => {
       if (!alive.isConnected) return;
-      await renderJobs();
+      await jobs.refresh();
       // A finished job never changes again, so stop re-fetching it.
       const done = resultBox.querySelector("[data-pair]");
       if (jobId && !done) await renderResult(jobId);
       poll();
     }, POLL_MS);
   }
-}
-
-// ── formatting ─────────────────────────────────────────────────────────────
-function pct(part, digits = 1) {
-  return (part * 100).toFixed(digits);
-}
-
-function num(n) {
-  return Number(n || 0).toLocaleString();
-}
-
-// Natural units, per the house rule — raw seconds past a minute read badly.
-function duration(s) {
-  if (s == null) return "—";
-  if (s < 1) return `${(s * 1000).toFixed(0)} ms`;
-  if (s < 90) return `${s.toFixed(1)} s`;
-  if (s < 5400) return `${(s / 60).toFixed(1)} min`;
-  if (s < 172800) return `${(s / 3600).toFixed(1)} h`;
-  return `${(s / 86400).toFixed(1)} d`;
-}
-
-function ago(epochSeconds) {
-  if (!epochSeconds) return "—";
-  return duration(Date.now() / 1000 - epochSeconds) + " ago";
-}
-
-function truncate(s, n) {
-  s = String(s).replace(/\s+/g, " ");
-  return s.length > n ? s.slice(0, n - 1) + "…" : s;
-}
-
-// Escapes for both text and attribute contexts — quotes included, since most
-// uses here are inside `value="..."`.
-function esc(s) {
-  return String(s ?? "").replace(/[&<>"']/g, (c) =>
-    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])
-  );
 }

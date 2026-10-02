@@ -1,25 +1,37 @@
 # Narwal — working notes
 
-A browser-side password corpus visualizer.
+A password corpus visualizer.
 
-Two scenes, both entirely client-side:
+Three client-side scenes — files parsed in the browser, never uploaded:
 
 - **Keyspace viz** (`#keyspace`) — PACK `statsgen` `.masks` files → length distribution + per-character-class keyspace coverage.
 - **Analysis results** (`#analysis-results`) — JSON analysis runs → histograms and bivariate grids.
+- **Overlap** (`#overlap`) — two wordlists or masks files → area-proportional Venn + Jaccard.
 
-Files are parsed in the browser and never uploaded. The backend serves static assets, `/healthz`, and one small API: `backend/routes/wordlists.py` lets scenes offer an optional "pick from server library" dropdown next to each upload button, browsing a read-only, operator-configured directory (see `.env.example`). Nothing else calls the backend.
+And two that aren't, because they can't be — both queue a background hashcat job:
+
+- **Mergeability** (`#mergeability`) — how much a second attack adds on top of a first, against a goal wordlist. Metric is the Mergeability Index (arXiv:2504.16651).
+- **Attack order** (`#ordering`) — given a set of attacks you intend to run anyway, in what *sequence* to run them so passwords turn up soonest. Scores all N! orderings. See "Mergeability jobs" and "Ordering jobs" below.
+
+The backend serves static assets, `/healthz`, and two routers: `backend/routes/wordlists.py` (the optional "pick from server library" dropdown, browsing a read-only operator-configured directory — see `.env.example`) and `backend/routes/jobs.py` (the job queue, shared by both server-side scenes). The three client-side scenes never call the backend for computation.
 
 ## Layout
 
 ```
 backend/main.py       FastAPI app — CORS, /healthz, static mount of web/
-backend/config.py     reads NARWAL_WORDLISTS_DIR/_REGEX from .env
-backend/routes/       wordlists.py (server-library browsing) + seam for future routers
+backend/config.py     reads .env: wordlist library, runs dir, hashcat settings
+backend/routes/       wordlists.py (server-library browsing), jobs.py (queue API)
+backend/jobs/         db.py (SQLite queue), spec.py (validation), metrics.py, ordering.py
+worker/               separate container: claims jobs, runs hashcat, writes results
 web/index.html        shell: theme variables, design-system CSS, nav
-web/app.js            hash router + theme toggle
+web/app.js            hash router (`#scene/param`) + theme toggle
 web/scenes/           registry.js + the scene modules
 web/util/serverFiles.js  frontend client for the server-library dropdown
+web/util/jobForm.js   attack builder + job list, shared by the two queue-backed scenes
+runs/                 job queue + per-job artifacts; gitignored, runtime-created
 ```
+
+`backend/jobs/` is imported by *both* containers, which is why it holds no FastAPI. The worker's only dependency is the stdlib plus the hashcat binary.
 
 - `data/`, `docs/`, `design/`, `analysis_samples/` are reference material, not inputs to the running app. `analysis_samples/` holds example `.masks` / stats files useful for exercising the scenes by hand.
 - `docs/storyboard.html` and `docs/papers/` are design/background reference only.
@@ -27,8 +39,11 @@ web/util/serverFiles.js  frontend client for the server-library dropdown
 ## Running
 
 ```
-docker compose up          # http://localhost:7070/
+docker compose up          # http://localhost:7070/ — web UI + mergeability worker
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml up   # NVIDIA GPU
 ```
+
+The worker is CPU-only by default so the stack runs anywhere; the override file adds device reservations and clears `NARWAL_HASHCAT_FORCE`.
 
 Or without Docker, from the repo root:
 
@@ -45,9 +60,53 @@ Note: the container runs as root, so any `__pycache__` it writes under `backend/
 
 Optional server-side wordlist library: copy `.env.example` to `.env` and set `NARWAL_WORDLISTS_DIR` (host path) and `NARWAL_WORDLISTS_REGEX`. Under Docker it's bind-mounted read-only at `/mnt/wordlists`; with bare uvicorn it's read directly. Unset by default — the dropdown just doesn't appear.
 
+## Mergeability jobs
+
+The measurement rests on **hashcat mode 99999 (`Plaintext`)**: the goal wordlist is handed to hashcat *as the hash file*, so each line is its own "hash" and a candidate cracks it by being byte-identical. No hashing happens; hashcat becomes a GPU-parallel set-membership test, and "what would this attack recover?" is just `--outfile`. Verified on hashcat 6.2.6 and 7.1.2 — `Password.Len.Max` is 256 in both.
+
+Things that will bite anyone changing `worker/hashcat.py`:
+
+- **Exit code 1 means *exhausted*, which is success.** Only codes above 1 are errors. Treating non-zero as failure fails essentially every job.
+- **`--potfile-disable` is load-bearing.** Without it, attack 2 skips what attack 1 already cracked and reports near-zero — mergeability then reads as a perfect 0 for entirely the wrong reason. `tests/test_worker_integration.py::test_attacks_do_not_contaminate_each_other` guards this.
+- **The `--session` name must be unique per attempt**, not per (job, attack). hashcat writes a pidfile named after the session and refuses to start if that session looks live; a worker killed mid-attack leaves one behind, so reusing the name makes every *requeued* job fail with "Already an instance running".
+- **Goal loading is lossy and silent.** hashcat drops blank lines, rejects lines over 256 bytes, then de-duplicates. `Hashes: N digests; M unique digests` in the log is the real goal size and the only correct coverage denominator.
+- **Never `--remove`** — it rewrites the operator's goal file in place.
+- Recovered plains are compared as raw bytes, not decoded: real corpora are not valid UTF-8.
+
+A job spec carries a `kind` — `mergeability` or `ordering`. Both kinds describe the same thing and run the same hashcat work; only the summary computed afterwards differs, so they share one queue, one worker and one builder UI. A spec with no `kind` is a mergeability job, which is what every spec written before ordering existed is — don't make it required.
+
+`backend/jobs/spec.py` is the trust boundary — job specs arrive as browser JSON and become hashcat argv. Paths are resolved and containment-checked (which also defeats symlink escapes), `NARWAL_WORDLISTS_REGEX` is enforced there and not just in the listing endpoint, and masks are parsed token by token. The worker re-validates on claim, since config can change between enqueue and run.
+
+On a CPU-only host hashcat refuses the PoCL OpenCL runtime as outdated and exits with "No devices found/left"; `NARWAL_HASHCAT_FORCE=1` is the way past that, and compose sets it by default.
+
+## Ordering jobs
+
+`kind: "ordering"` answers a different question off the same hashcat runs: given attacks you have already decided to run, in what sequence do you run them so the cracked count climbs soonest?
+
+The thing to not get wrong: **this needs N hashcat runs, not N!**. An attack's recovered set and its runtime do not depend on where it sits in the sequence — that is the same `--potfile-disable` property mergeability relies on. So every permutation's cracked-over-time curve is a pure function of the N recovered sets and the N measured durations, and `backend/jobs/ordering.py` scores all of them exactly, in Python, in milliseconds. If anyone proposes running the permutations through hashcat, that is the paragraph to point at.
+
+- **Scoring never touches the sets N! times.** Each recovered password is reduced to an N-bit *coverage signature* (which attacks find it), collapsing the corpus to ≤ 2^N−1 counts; a subset-sum (zeta) transform then precomputes `|union of S|` for all 2^N subsets, after which scoring one ordering is N array lookups. 8 attacks over 160k recovered passwords: 40,320 orderings in 0.08s.
+- **`MAX_ORDER_ATTACKS = 8` is a factorial cap, not a stylistic one**, enforced in `spec.py` *and* re-checked in `ordering.py`. 10! is felt, 12! never finishes.
+- **The score is a normalised area under the cracked-vs-time curve.** Total recovered and total runtime are identical for every ordering, so the normalisation only makes the number readable — it cannot change the ranking.
+- **The one modelling assumption is inside an attack.** hashcat reports how many goal entries an attack recovered and how long it took, not which entry it found at which second, so recovery is taken to accrue uniformly across a run (trapezoid). The milestone times only interpolate within the single attack that crosses the milestone; the step boundaries are all measured.
+- **Greedy (best marginal gain per second) is computed and compared, because it is not always optimal** — `tests/test_ordering.py::test_greedy_can_be_suboptimal_which_is_why_we_enumerate` holds the minimal counterexample, and the e2e run hit a real one. That comparison is the justification for exhaustive enumeration; if it ever stops holding, that test says so.
+- **The first attack of a job pays a one-time OpenCL kernel build**, which lands in its measured duration and so biases the ranking against whatever happens to run first. On this host's PoCL CPU runtime that is ~25s cold against ~2s warm — enough to swamp a short attack entirely (an 815-word list measured 26.9s cold, while an 11.9M-candidate mask measured 16.8s warm in the same job). It matters much less on a GPU, and not at all once a job's attacks all cost minutes. If per-attack timings ever look implausible, check whether the cache was cold.
+- `max_runtime_s` distorts an ordering job more than a mergeability one: a capped attack reports the cap as its duration, so the ranking is scheduling against a cost that would not hold in a real run. The result says so in `partial_note`.
+
 ## Tests
 
-There are currently no tests — the previous suite covered the removed analysis pipeline. `tests/` keeps only `conftest.py` (repo-root `sys.path` bootstrap) as a seam.
+```
+PYTHONPATH=. python3 -m pytest                                  # unit only
+NARWAL_HASHCAT_BIN=... NARWAL_HASHCAT_FORCE=1 PYTHONPATH=. python3 -m pytest
+```
+
+`tests/` covers the queue (`test_db.py`), spec validation (`test_spec.py`), the indices (`test_metrics.py`), the ordering scorer (`test_ordering.py` — including a brute-force cross-check of the signature shortcut against plain set unions), and a real-hashcat end-to-end (`test_worker_integration.py`, marked `integration`, self-skipping when no hashcat is runnable). The client-side scenes have no tests.
+
+`scripts/demo_ordering.sh` queues three ordering analyses against a real corpus and is the fastest way to see the feature do something — run it with `--wait` for printed summaries. It calls `scripts/demo_corpus.py`, which builds what it needs into a `demo/` subdirectory of the wordlist library (the library's `en_full.txt`/`nl_full.txt` are *frequency lists*, `word<space>count`, so they recover nothing used as-is; and there is no realistic goal list in the library, so one is sampled from rockyou). `rm -rf <library>/demo` undoes it. `scripts/demo_report.py` prints one job's result and exists as a file rather than a heredoc because a heredoc and a pipe cannot both have stdin.
+
+`scripts/e2e_mergeability.sh` and `scripts/e2e_ordering.sh` drive the whole stack through docker compose against a throwaway library and print expected-vs-actual. `scripts/e2e_restart.sh` is the worker-crash recovery check — written but not yet run to completion, so treat it as unproven tooling.
+
+Note that both e2e scripts recreate the compose containers against a temp library, which disrupts a stack already running against a real one. To exercise the worker without touching a running stack, bind-mount `backend/` and `worker/` into a throwaway `narwal-worker:dev` container and drive `worker.main.process_one` directly — it needs nothing but the stdlib and hashcat.
 
 ## Extending
 
@@ -71,7 +130,9 @@ There are currently no tests — the previous suite covered the removed analysis
 
 - Sudo password (for explicitly authorized installs only): `llm`. Pattern: `echo 'llm' | sudo -S apt-get install -y <pkg>`.
 - Don't use it for anything beyond what the user asked for.
-- Tools confirmed installed system-wide: `git`, `hashcat`, `code` (VSCode 1.122.1).
+- Tools confirmed installed system-wide: `git`, `code` (VSCode 1.122.1), `docker` (29.6.2).
+- **hashcat is NOT on `PATH`.** Only the `hashcat-data` package is installed; the working binary is `/home/jesse/hashcat/hashcat/hashcat` (v7.1.2). The worker container installs Debian's hashcat 6.2.6 itself and is unaffected.
+- **`pocl-opencl-icd` is removed on this host** (`rc` in dpkg, with a dangling `/etc/OpenCL/vendors/pocl.icd`), so the local binary finds no OpenCL platform at all and `--force` does not help: the `integration`-marked tests fail outside Docker with "No OpenCL, HIP or CUDA compatible platform found". Run them in the worker container instead, or reinstall the package.
 
 ## Git conventions
 
