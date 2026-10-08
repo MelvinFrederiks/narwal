@@ -5,21 +5,29 @@ Writes everything into a `demo/` subdirectory of the configured wordlist
 library and touches nothing that is already there. Delete that one directory to
 undo it.
 
-Why these files:
+The only library file this needs is `rockyou.txt` — earlier versions also
+required `rockyou.parsed.txt`, `en_full.txt` and `nl_full.txt`, which not
+every configured library carries. The attack side comes from elsewhere on the
+box instead:
 
-  · The library's `en_full.txt` / `nl_full.txt` / `en_nl_combined.txt` are
-    *frequency lists* — "word<space>count" per line — so hashcat would try
-    "you 22484400" as a candidate and recover nothing. `en_nl_words.txt` is the
-    word column alone, which is what a dictionary attack actually needs.
-  · `rockyou.parsed.txt` is a token-level parse with heavy duplication (19.9M
-    lines, 330k distinct). Deduplicating it costs nothing and makes the attack's
-    measured runtime mean what it looks like it means.
   · `goal_rockyou.txt` is the point of the whole thing: there is no realistic
     goal list in the library (`goal.txt` is 15 hand-typed lines). A random
-    sample of real rockyou passwords gives one. The attacks below are *other*
-    corpora, so coverage comes out partial and interesting on its own — no
-    artificial hold-out needed. rockyou.txt itself is deliberately never used as
-    an attack, since it would recover the goal by construction.
+    sample of real rockyou passwords gives one. rockyou.txt itself is
+    deliberately never used as an attack, since it would recover the goal by
+    construction.
+  · `demo/cracklib_small.txt` is cracklib's own small dictionary
+    (`/usr/share/dict/cracklib-small`, shipped by the `cracklib-runtime` /
+    `dictionaries-common` packages on Debian and Ubuntu) — a real, independent
+    word list rather than another slice of rockyou, so an attack built from it
+    is testing something other than "does rockyou contain rockyou". Copied
+    rather than read in place because an attack wordlist has to live under
+    `NARWAL_WORDLISTS_DIR`.
+  · Masks and rules need no file at all: a mask is a literal string in the
+    attack spec (see scripts/demo_ordering.sh for a small handful — single
+    character classes a few positions deep, cheap enough to run in a demo),
+    and a ruleset is just a name from whatever hashcat NARWAL_HASHCAT_BIN
+    points at (e.g. `best64.rule`/`best66.rule`, picked up from
+    NARWAL_RULES_DIR — see config.rules_root).
 
 Lines hashcat would silently drop from a goal file (blank, or over its
 256-byte limit for -m 99999) are filtered out here instead, so the goal size
@@ -40,8 +48,11 @@ from backend import config  # noqa: E402
 
 SEED = 20261002
 GOAL_SIZE = 50_000
-WORDS_PER_LANGUAGE = 150_000
 MAX_GOAL_LINE = 256  # hashcat -m 99999 Password.Len.Max
+
+# cracklib's small dictionary — not part of the wordlist library, just a file
+# the box already has. Install `cracklib-runtime` (Debian/Ubuntu) if missing.
+CRACKLIB_SMALL = Path("/usr/share/dict/cracklib-small")
 
 
 def read_lines(path: Path) -> list[bytes]:
@@ -65,10 +76,12 @@ def main() -> int:
     demo.mkdir(exist_ok=True)
     print(f"building demo corpus in {demo}")
 
-    for required in ("rockyou.txt", "rockyou.parsed.txt", "en_full.txt", "nl_full.txt"):
-        if not (root / required).is_file():
-            print(f"  missing {required} — this demo is built around the stock library")
-            return 1
+    if not (root / "rockyou.txt").is_file():
+        print("  missing rockyou.txt — this demo is built around the stock library")
+        return 1
+    if not CRACKLIB_SMALL.is_file():
+        print(f"  missing {CRACKLIB_SMALL} — install cracklib-runtime (Debian/Ubuntu)")
+        return 1
 
     # ── goal: a random sample of real passwords ─────────────────────────────
     goal_path = demo / "goal_rockyou.txt"
@@ -85,32 +98,14 @@ def main() -> int:
         write_lines(goal_path, sorted(random.sample(rock, GOAL_SIZE)))
         print(f"  goal_rockyou.txt — {GOAL_SIZE:,} sampled passwords")
 
-    # ── a real dictionary, out of the frequency lists ───────────────────────
-    words_path = demo / "en_nl_words.txt"
-    if words_path.exists():
-        print("  en_nl_words.txt already there")
+    # ── attack dictionary: cracklib's own word list ─────────────────────────
+    cracklib_path = demo / "cracklib_small.txt"
+    if cracklib_path.exists():
+        print("  cracklib_small.txt already there")
     else:
-        words: set[bytes] = set()
-        for name in ("en_full.txt", "nl_full.txt"):
-            taken = 0
-            for line in read_lines(root / name):
-                word = line.split(b" ", 1)[0].strip()
-                if word:
-                    words.add(word)
-                    taken += 1
-                if taken >= WORDS_PER_LANGUAGE:
-                    break
-        write_lines(words_path, sorted(words))
-        print(f"  en_nl_words.txt — {len(words):,} English + Dutch words")
-
-    # ── the token list, deduplicated ────────────────────────────────────────
-    tokens_path = demo / "rockyou_tokens.txt"
-    if tokens_path.exists():
-        print("  rockyou_tokens.txt already there")
-    else:
-        tokens = sorted({line for line in read_lines(root / "rockyou.parsed.txt") if line})
-        write_lines(tokens_path, tokens)
-        print(f"  rockyou_tokens.txt — {len(tokens):,} distinct tokens")
+        words = sorted({line for line in read_lines(CRACKLIB_SMALL) if line})
+        write_lines(cracklib_path, words)
+        print(f"  cracklib_small.txt — {len(words):,} words from {CRACKLIB_SMALL}")
 
     print("done. `rm -rf " + str(demo) + "` to undo.")
     return 0

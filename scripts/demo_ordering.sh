@@ -20,10 +20,11 @@
 #                          candidates. 720 sequences.
 #   2. Dictionary vs rules — the nesting every operator actually faces. A rule
 #                          set that includes the identity rule is a strict
-#                          superset of the bare wordlist, so one of these two
-#                          attacks is guaranteed redundant after the other.
-#                          The question is whether the cheap one still earns an
-#                          early slot. 6 sequences.
+#                          superset of the bare wordlist (here, cracklib's own
+#                          small dictionary), so one of these two attacks is
+#                          guaranteed redundant after the other. The question
+#                          is whether the cheap one still earns an early slot.
+#                          6 sequences.
 #   3. Mask family       — four brute forces over mostly disjoint character
 #                          classes, so almost nothing is redundant. The
 #                          baseline case: with no overlap to reason about,
@@ -70,18 +71,17 @@ echo "== queueing"
 JOB1=$(post "Demo 1 — the full lineup" '[
   {"label":"brute 7 lower","mode":"mask","mask":"?l?l?l?l?l?l?l"},
   {"label":"common 815","mode":"wordlist","wordlist":"common_passwords_win.txt"},
-  {"label":"en+nl dictionary","mode":"wordlist","wordlist":"demo/en_nl_words.txt"},
-  {"label":"tokens + rules","mode":"wordlist","wordlist":"demo/rockyou_tokens.txt","rules":["RULE_PLACEHOLDER"]},
+  {"label":"cracklib + rules","mode":"wordlist","wordlist":"demo/cracklib_small.txt","rules":["RULE_PLACEHOLDER"]},
   {"label":"digits 1-8","mode":"mask","mask":"?d?d?d?d?d?d?d?d","increment_min":1,"increment_max":8},
   {"label":"rockyou alpha","mode":"wordlist","wordlist":"rockyou.alpha"}
 ]')
 echo "  1. the full lineup      $API/#ordering/$JOB1"
 
-# 2. best64/best66 starts with ":" (the identity rule), so "tokens + rules"
-#    generates every candidate "tokens" does and ~76 more per word.
+# 2. best64/best66 starts with ":" (the identity rule), so "cracklib + rules"
+#    generates every candidate "cracklib" does and ~76 more per word.
 JOB2=$(post "Demo 2 — dictionary vs rules" '[
-  {"label":"tokens","mode":"wordlist","wordlist":"demo/rockyou_tokens.txt"},
-  {"label":"tokens + rules","mode":"wordlist","wordlist":"demo/rockyou_tokens.txt","rules":["RULE_PLACEHOLDER"]},
+  {"label":"cracklib","mode":"wordlist","wordlist":"demo/cracklib_small.txt"},
+  {"label":"cracklib + rules","mode":"wordlist","wordlist":"demo/cracklib_small.txt","rules":["RULE_PLACEHOLDER"]},
   {"label":"digits 1-8","mode":"mask","mask":"?d?d?d?d?d?d?d?d","increment_min":1,"increment_max":8}
 ]')
 echo "  2. dictionary vs rules  $API/#ordering/$JOB2"
