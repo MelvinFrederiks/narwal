@@ -15,9 +15,12 @@
 #   1. The full lineup   — a realistic six-attack plan. Contains an expensive
 #                          brute force that is *completely* redundant: every
 #                          7-lowercase-letter password in the goal list is also
-#                          in rockyou.alpha, so after the dictionary has run it
-#                          contributes literally nothing for its 8 billion
-#                          candidates. 720 sequences.
+#                          in demo/rockyou_alpha.txt (every distinct all-lower
+#                          line in rockyou.txt — same source as the goal
+#                          sample, so the superset holds by construction), so
+#                          after the dictionary has run it contributes
+#                          literally nothing for its 8 billion candidates.
+#                          720 sequences.
 #   2. Dictionary vs rules — the nesting every operator actually faces. A rule
 #                          set that includes the identity rule is a strict
 #                          superset of the bare wordlist (here, cracklib's own
@@ -70,10 +73,11 @@ echo "== queueing"
 #    find the good sequence itself, and the builder's order is not it.
 JOB1=$(post "Demo 1 — the full lineup" '[
   {"label":"brute 7 lower","mode":"mask","mask":"?l?l?l?l?l?l?l"},
-  {"label":"common 815","mode":"wordlist","wordlist":"common_passwords_win.txt"},
+  {"label":"common 815","mode":"wordlist","wordlist":"demo/common_rockyou.txt"},
+  {"label":"cracklib","mode":"wordlist","wordlist":"demo/cracklib_small.txt"},
   {"label":"cracklib + rules","mode":"wordlist","wordlist":"demo/cracklib_small.txt","rules":["RULE_PLACEHOLDER"]},
   {"label":"digits 1-8","mode":"mask","mask":"?d?d?d?d?d?d?d?d","increment_min":1,"increment_max":8},
-  {"label":"rockyou alpha","mode":"wordlist","wordlist":"rockyou.alpha"}
+  {"label":"rockyou alpha","mode":"wordlist","wordlist":"demo/rockyou_alpha.txt"}
 ]')
 echo "  1. the full lineup      $API/#ordering/$JOB1"
 
