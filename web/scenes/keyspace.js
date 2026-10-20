@@ -323,8 +323,6 @@ export async function render(mount) {
     msg.style.marginTop = "10px";
     msg.innerHTML = html;
   }
-
-  mountFinishButton(mount, { sceneId: "keyspace", label: "Mask analysis" });
 }
 
 // ── .masks parser ─────────────────────────────────────────────────────────
