@@ -32,6 +32,8 @@ from __future__ import annotations
 
 from itertools import combinations
 
+from .result import AttackResult, MergeabilityResult, PairStats
+
 
 def jaccard(a: set, b: set) -> float:
     """|A ∩ B| / |A ∪ B|. Two empty sets are defined as 0, not 1/0 — an attack
@@ -52,7 +54,7 @@ def mergeability(a: set, b: set) -> float:
     return (len(a | b) - best) / best
 
 
-def pair_stats(label_a: str, a: set, label_b: str, b: set, goal_size: int) -> dict:
+def pair_stats(label_a: str, a: set, label_b: str, b: set, goal_size: int) -> PairStats:
     """Everything the UI shows for one pair, in one place.
 
     `only_a`/`only_b`/`shared` are what the Venn needs, and they are consistent
@@ -61,35 +63,33 @@ def pair_stats(label_a: str, a: set, label_b: str, b: set, goal_size: int) -> di
     """
     shared = len(a & b)
     union = len(a | b)
-    return {
-        "a": label_a,
-        "b": label_b,
-        "recovered_a": len(a),
-        "recovered_b": len(b),
-        "shared": shared,
-        "only_a": len(a) - shared,
-        "only_b": len(b) - shared,
-        "union": union,
-        "jaccard": jaccard(a, b),
-        "mergeability": mergeability(a, b),
+    return PairStats(
+        a=label_a,
+        b=label_b,
+        recovered_a=len(a),
+        recovered_b=len(b),
+        shared=shared,
+        only_a=len(a) - shared,
+        only_b=len(b) - shared,
+        union=union,
+        jaccard=jaccard(a, b),
+        mergeability=mergeability(a, b),
         # What the merged pair covers of the whole goal list — the number that
         # answers "is it worth running both?"
-        "union_coverage": union / goal_size if goal_size else 0.0,
-    }
+        union_coverage=union / goal_size if goal_size else 0.0,
+    )
 
 
-def summarise(recovered: dict[str, set], goal_size: int) -> dict:
+def summarise(recovered: dict[str, set], goal_size: int) -> MergeabilityResult:
     """Per-attack coverage plus every pair, given each attack's recovered set.
 
     Pairs are emitted in descending mergeability so the most complementary
     combination is the first thing the user reads.
     """
     per_attack = [
-        {
-            "label": label,
-            "recovered": len(s),
-            "coverage": len(s) / goal_size if goal_size else 0.0,
-        }
+        AttackResult(
+            label=label, recovered=len(s), coverage=len(s) / goal_size if goal_size else 0.0
+        )
         for label, s in recovered.items()
     ]
     pairs = [
@@ -99,11 +99,11 @@ def summarise(recovered: dict[str, set], goal_size: int) -> dict:
     pairs.sort(key=lambda p: p["mergeability"], reverse=True)
 
     all_union = set().union(*recovered.values()) if recovered else set()
-    return {
-        "goal_size": goal_size,
-        "attacks": per_attack,
-        "pairs": pairs,
+    return MergeabilityResult(
+        goal_size=goal_size,
+        attacks=per_attack,
+        pairs=pairs,
         # Ceiling for the whole job: what every attack together covers.
-        "combined_recovered": len(all_union),
-        "combined_coverage": len(all_union) / goal_size if goal_size else 0.0,
-    }
+        combined_recovered=len(all_union),
+        combined_coverage=len(all_union) / goal_size if goal_size else 0.0,
+    )

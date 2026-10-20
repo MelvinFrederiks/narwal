@@ -36,16 +36,16 @@ import socket
 import sys
 import time
 import uuid
+from typing import cast, overload
 
 from backend import config
 from backend.jobs import db, metrics, ordering, wakeup
 from backend.jobs import spec as spec_mod
+from backend.jobs.result import FinalJobResult, MergeabilityResult, OrderingResult
 
 from . import hashcat
 
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s"
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 log = logging.getLogger("narwal.worker")
 
 POLL_SECONDS = float(os.environ.get("NARWAL_WORKER_POLL", "2"))
@@ -100,10 +100,16 @@ def _run_attacks(
     # so a contaminated one is not a cosmetic problem — see hashcat.warm_up.
     warmup: dict[str, float] = {}
     if config.hashcat_warmup:
-        db.heartbeat(conn, job_id, {
-            "attack_index": 0, "attack_count": total,
-            "attack_label": "warming up", "status": None,
-        })
+        db.heartbeat(
+            conn,
+            job_id,
+            {
+                "attack_index": 0,
+                "attack_count": total,
+                "attack_label": "warming up",
+                "status": None,
+            },
+        )
         warmup = hashcat.warm_up(spec, workdir, session=f"narwal-{job_id}-{uuid.uuid4().hex[:8]}")
 
     for index, attack in enumerate(spec.attacks):
@@ -130,7 +136,10 @@ def _run_attacks(
         # precisely the case the requeue exists to recover. Restore files are
         # disabled, so nothing needs to find this session again.
         run = hashcat.run_attack(
-            spec, attack, workdir, index,
+            spec,
+            attack,
+            workdir,
+            index,
             session=f"narwal-{job_id}-{index}-{uuid.uuid4().hex[:8]}",
             should_continue=should_continue,
         )
@@ -153,13 +162,18 @@ def _run_attacks(
         runs.append(run)
         log.info(
             "job %s: attack %d/%d recovered %d of %d in %.1fs",
-            job_id, index + 1, total, len(run.recovered), run.goal_loaded, run.duration_s,
+            job_id,
+            index + 1,
+            total,
+            len(run.recovered),
+            run.goal_loaded,
+            run.duration_s,
         )
 
     return runs, warmup
 
 
-def run_job(conn, job: dict) -> dict:
+def run_job(conn, job: dict) -> FinalJobResult:
     job_id = job["id"]
     # Re-validated here, not trusted from the queue: config can change between
     # enqueue and claim, and anything with the volume mounted can write the DB.
@@ -173,14 +187,25 @@ def run_job(conn, job: dict) -> dict:
     # max so a run that exited before printing its summary cannot shrink the
     # coverage denominator and inflate every percentage.
     goal_size = max((r.goal_loaded for r in runs), default=0)
-    goal_rejected = max((r.goal_rejected for r in runs), default=0)
 
     if spec.kind == "ordering":
-        result = ordering.summarise(
-            recovered, {r.label: r.duration_s for r in runs}, goal_size
-        )
+        result = ordering.summarise(recovered, {r.label: r.duration_s for r in runs}, goal_size)
     else:
         result = metrics.summarise(recovered, goal_size)
+
+    return finalize(result, recovered, runs, warmup, spec, started)
+
+
+def finalize(
+    base: MergeabilityResult | OrderingResult,
+    recovered: dict[str, set[bytes]],
+    runs: list[hashcat.AttackRun],
+    warmup: dict[str, float],
+    spec: spec_mod.JobSpec,
+    started: float,
+) -> FinalJobResult:
+    # Enrich the returned results dict with more general info
+    result = cast(FinalJobResult, base)
 
     by_label = {r.label: r for r in runs}
     for entry in result["attacks"]:
@@ -201,6 +226,8 @@ def run_job(conn, job: dict) -> dict:
         a, b = recovered[pair["a"]], recovered[pair["b"]]
         pair["sample_only_a"] = _sample(a - b)
         pair["sample_only_b"] = _sample(b - a)
+
+    goal_rejected = max((r.goal_rejected for r in runs), default=0)
 
     partial = any(r.partial for r in runs)
     result.update(
@@ -263,7 +290,10 @@ def process_one(conn) -> bool:
             extra = f" — best order {' → '.join(result['best']['order'])}"
         log.info(
             "job %s: done in %.1fs — combined coverage %.1f%%%s",
-            job_id, result["duration_s"], result["combined_coverage"] * 100, extra,
+            job_id,
+            result["duration_s"],
+            result["combined_coverage"] * 100,
+            extra,
         )
     return True
 
@@ -292,8 +322,7 @@ def main() -> int:
 
     if config.wordlists_root is None:
         log.warning(
-            "NARWAL_WORDLISTS_DIR is not set — every job will fail validation. "
-            "See .env.example."
+            "NARWAL_WORDLISTS_DIR is not set — every job will fail validation. See .env.example."
         )
 
     conn = db.connect()
@@ -307,7 +336,8 @@ def main() -> int:
     log.info(
         "watching queue at %s (%s)",
         config.db_path(),
-        f"idle until nudged, {IDLE_SECONDS:g}s fallback" if waiter
+        f"idle until nudged, {IDLE_SECONDS:g}s fallback"
+        if waiter
         else f"polling every {POLL_SECONDS:g}s — no FIFO on this filesystem",
     )
 
