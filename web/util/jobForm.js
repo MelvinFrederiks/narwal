@@ -126,11 +126,11 @@ export function attackBuilder({
         </div>
         <div style="display:grid;grid-template-columns:auto 1fr;gap:8px 12px;align-items:center;font-size:13px">
           ${needsWordlist ? `
-            <label style="color:var(--text-secondary)">Wordlist</label>
+            <label class="attack-option" style="color:var(--text-secondary)">Wordlist</label>
             <input type="text" data-field="wordlist" list="${id("files")}" value="${esc(a.wordlist)}"
                    placeholder="candidate list"/>` : ""}
           ${a.mode === "wordlist" ? `
-            <label style="color:var(--text-secondary)">Rules</label>
+            <label class="attack-option" style="color:var(--text-secondary)">Rules</label>
             <span style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
               <input type="text" data-field="rules" list="${id("rules")}" value="${esc(a.rules.join(", "))}"
                      placeholder="optional — comma-separated, e.g. best64.rule" style="flex:1;min-width:200px"/>
@@ -140,7 +140,7 @@ export function attackBuilder({
               <span class="sub" style="margin:0;font-size:11px">max ${cfg.max_rules}</span>
             </span>` : ""}
           ${needsMask ? `
-            <label style="color:var(--text-secondary)">Mask</label>
+            <label class="attack-option" style="color:var(--text-secondary)">Mask</label>
             <input type="text" data-field="mask" value="${esc(a.mask)}"
                    placeholder="?u?l?l?l?d?d?d?d" style="font-family:'SF Mono',Menlo,Consolas,monospace"/>
             <div data-charsets="${i}" style="display:contents">${charsetRowsHtml(a)}</div>` : ""}
@@ -153,7 +153,7 @@ export function attackBuilder({
   // re-render that would steal focus from the mask input.
   function charsetRowsHtml(a) {
     return maskCharsetRefs(a.mask).map((d) => `
-      <label style="color:var(--text-secondary)">Charset ?${d}</label>
+      <label class="attack-option" style="color:var(--text-secondary)">Charset ?${d}</label>
       <input type="text" data-charset="${d}" value="${esc(a.charsets?.[d] || "")}"
              placeholder="e.g. ?l?s or abc0123456789"
              style="font-family:'SF Mono',Menlo,Consolas,monospace"/>`).join("");
