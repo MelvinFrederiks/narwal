@@ -81,6 +81,7 @@ class OrderingSingleRun(TypedDict):
     order: list[str]
     auc: float
     efficiency: float
+    steps: list[OrderingStep]
     milestones: list[MilestoneStat]
 
 
@@ -134,3 +135,17 @@ class FinalJobResult(JobResultBase[FinalAttackResult]):
     finished_at: float
     duration_s: float
     partial_note: NotRequired[str]
+    # Ordering specific
+    total_runtime_s: NotRequired[float | None]
+    permutations_scored: NotRequired[int]
+    timing_available: NotRequired[bool]
+    milestone_fractions: NotRequired[list[float]]
+    best: NotRequired[OrderingSingleRun]
+    worst: NotRequired[OrderingSingleRun]
+    greedy: NotRequired[dict[str, object]]
+    top: NotRequired[list[dict[str, object]]]
+    first_choice: NotRequired[list[OrderingFirstChoice]]
+    distribution: NotRequired[OrderingDistribution]
+    signatures: NotRequired[list[OrderingSignature]]
+    # Mergeability specific
+    pairs: NotRequired[list[PairStats]]

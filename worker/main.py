@@ -173,7 +173,7 @@ def _run_attacks(
     return runs, warmup
 
 
-def run_job(conn, job: dict) -> dict:
+def run_job(conn, job: dict) -> FinalJobResult:
     job_id = job["id"]
     # Re-validated here, not trusted from the queue: config can change between
     # enqueue and claim, and anything with the volume mounted can write the DB.
@@ -193,7 +193,7 @@ def run_job(conn, job: dict) -> dict:
     else:
         result = metrics.summarise(recovered, goal_size)
 
-    return finalize(dict(result), recovered, runs, warmup, spec, started)
+    return finalize(result, recovered, runs, warmup, spec, started)
 
 
 def finalize(
