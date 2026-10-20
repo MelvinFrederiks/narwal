@@ -81,10 +81,7 @@ class OrderingSingleRun(TypedDict):
     order: list[str]
     auc: float
     efficiency: float
-    steps: NotRequired[list[OrderingStep]]
     milestones: list[MilestoneStat]
-    is_optimal: NotRequired[bool]
-    beaten_by: NotRequired[int]
 
 
 # A signature is a certain subset of attacks which recovers a certain number of passwords.
@@ -109,8 +106,8 @@ class OrderingResult(JobResultBase[OrderingAttackResult]):
     milestone_fractions: list[float]
     best: OrderingSingleRun
     worst: OrderingSingleRun
-    greedy: OrderingSingleRun
-    top: list[OrderingSingleRun]
+    greedy: dict[str, object]
+    top: list[dict[str, object]]
     first_choice: list[OrderingFirstChoice]
     distribution: OrderingDistribution
     signatures: list[OrderingSignature]
