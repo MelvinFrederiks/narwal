@@ -75,6 +75,17 @@ from __future__ import annotations
 import heapq
 from itertools import permutations
 
+from backend.jobs.result import (
+    MilestoneStat,
+    OrderingAttackResult,
+    OrderingDistribution,
+    OrderingFirstChoice,
+    OrderingResult,
+    OrderingSignature,
+    OrderingSingleRun,
+    OrderingStep,
+)
+
 # 8! = 40,320 orderings is instant; 10! = 3.6M starts to be felt, and 12!
 # never finishes. Exhaustive enumeration is the feature, so the cap is real
 # rather than a quiet fallback to a heuristic.
@@ -84,9 +95,9 @@ MAX_ORDER_ATTACKS = 8
 # table reports times for. 1.0 is "everything these attacks will ever find".
 MILESTONES = (0.25, 0.5, 0.75, 0.9, 1.0)
 
-TOP_K = 20          # orderings returned in full ranking order
-DIST_BINS = 20      # buckets in the score histogram
-MAX_SIGNATURES = 16 # coverage signatures returned, largest first
+TOP_K = 20  # orderings returned in full ranking order
+DIST_BINS = 20  # buckets in the score histogram
+MAX_SIGNATURES = 16  # coverage signatures returned, largest first
 
 
 class OrderingError(ValueError):
@@ -94,6 +105,7 @@ class OrderingError(ValueError):
 
 
 # ── coverage signatures ─────────────────────────────────────────────────────
+
 
 def signature_counts(recovered: dict[str, set[bytes]], labels: list[str]) -> dict[int, int]:
     """Collapse the recovered sets into {bitmask: how many passwords have it}.
@@ -143,6 +155,7 @@ def union_table(n: int, counts: dict[int, int]) -> tuple[list[int], int]:
 
 # ── scoring one ordering ────────────────────────────────────────────────────
 
+
 def _auc(order: tuple[int, ...], table: list[int], dur: list[float]) -> float:
     """Area under the cracked-vs-time curve. The hot loop — `table` lookups
     only, no set operations."""
@@ -157,7 +170,7 @@ def _auc(order: tuple[int, ...], table: list[int], dur: list[float]) -> float:
     return auc
 
 
-def _milestones(steps: list[dict], total: int) -> list[dict]:
+def _milestones(steps: list[OrderingStep], total: int) -> list[MilestoneStat]:
     """When this ordering crosses each MILESTONE fraction of its own total.
 
     Interpolates linearly *within* the single attack that crosses the
@@ -182,14 +195,16 @@ def _milestones(steps: list[dict], total: int) -> list[dict]:
                 after = step["label"]
                 break
             prev_c, prev_t = step["cumulative"], step["elapsed_s"]
-        out.append({
-            "fraction": frac,
-            "target": int(round(target)),
-            "time_s": time_s,
-            # Which attack is running when the milestone is reached — the
-            # actionable half of the number.
-            "after": after,
-        })
+        out.append(
+            MilestoneStat(
+                fraction=frac,
+                target=int(round(target)),
+                time_s=time_s,
+                # Which attack is running when the milestone is reached — the
+                # actionable half of the number.
+                after=after,
+            )
+        )
     return out
 
 
@@ -200,9 +215,9 @@ def describe(
     dur: list[float],
     total: int,
     goal_size: int,
-) -> dict:
+) -> OrderingSingleRun:
     """One ordering in full: per-step curve, area, efficiency, milestones."""
-    steps: list[dict] = []
+    steps: list[OrderingStep] = []
     mask = 0
     prev = 0
     elapsed = 0.0
@@ -213,18 +228,20 @@ def describe(
         t = dur[i]
         auc += t * (prev + cur) * 0.5
         elapsed += t
-        steps.append({
-            "label": labels[i],
-            "duration_s": t,
-            "elapsed_s": elapsed,
-            # New passwords this attack contributes *given everything before
-            # it* — the number that makes an ordering good or bad.
-            "gain": cur - prev,
-            "gain_rate": (cur - prev) / t if t > 0 else 0.0,
-            "cumulative": cur,
-            "cumulative_coverage": cur / goal_size if goal_size else 0.0,
-            "cumulative_share": cur / total if total else 0.0,
-        })
+        steps.append(
+            OrderingStep(
+                label=labels[i],
+                duration_s=t,
+                elapsed_s=elapsed,
+                # New passwords this attack contributes *given everything before
+                # it* — the number that makes an ordering good or bad.
+                gain=cur - prev,
+                gain_rate=(cur - prev) / t if t > 0 else 0.0,
+                cumulative=cur,
+                cumulative_coverage=cur / goal_size if goal_size else 0.0,
+                cumulative_share=cur / total if total else 0.0,
+            )
+        )
         prev = cur
 
     runtime = elapsed
@@ -269,11 +286,12 @@ def greedy_order(n: int, table: list[int], dur: list[float]) -> tuple[int, ...]:
 
 # ── the whole analysis ──────────────────────────────────────────────────────
 
+
 def summarise(
     recovered: dict[str, set[bytes]],
     durations: dict[str, float],
     goal_size: int,
-) -> dict:
+) -> OrderingResult:
     """Score every ordering of these attacks. The worker's entry point.
 
     `recovered` maps attack label → the goal entries it recovered (raw bytes,
@@ -307,7 +325,7 @@ def summarise(
     # One pass over every permutation. Only the scalar score is kept per
     # ordering; the full description is rebuilt afterwards for the handful of
     # orderings that are actually reported.
-    top: list[tuple[float, tuple[int, ...]]] = []   # min-heap, size TOP_K
+    top: list[tuple[float, tuple[int, ...]]] = []  # min-heap, size TOP_K
     effs: list[float] = []
     worst = (float("inf"), None)
     best_from: list[tuple[float, tuple[int, ...]] | None] = [None] * n
@@ -340,75 +358,71 @@ def summarise(
     greedy_beaten_by = sum(1 for e in effs if e > greedy_detail["efficiency"] + 1e-12)
 
     per_attack = [
-        {
-            "label": label,
-            "recovered": len(recovered[label]),
-            "coverage": len(recovered[label]) / goal_size if goal_size else 0.0,
-            "duration_s": dur[i] if timing_available else None,
-            # Recovered per second in isolation: the first-order reason an
-            # attack belongs early or late, before overlap is accounted for.
-            "rate_per_s": (len(recovered[label]) / dur[i]) if timing_available and dur[i] > 0 else None,
-            # Passwords only this attack finds. Whatever the ordering, these
-            # are not recovered until it runs.
-            "exclusive": counts.get(1 << i, 0),
-        }
+        OrderingAttackResult(
+            label=label,
+            recovered=len(recovered[label]),
+            coverage=len(recovered[label]) / goal_size if goal_size else 0.0,
+            duration_s=dur[i] if timing_available else None,
+            rate_per_s=(len(recovered[label]) / dur[i])
+            if timing_available and dur[i] > 0
+            else None,
+            exclusive=counts.get(1 << i, 0),
+        )
         for i, label in enumerate(labels)
     ]
 
     signatures = sorted(
         (
-            {
-                "labels": [labels[i] for i in range(n) if mask & (1 << i)],
-                "count": c,
-                "share": c / total if total else 0.0,
-            }
+            OrderingSignature(
+                labels=[labels[i] for i in range(n) if mask & (1 << i)],
+                count=c,
+                share=c / total if total else 0.0,
+            )
             for mask, c in counts.items()
         ),
         key=lambda s: (-s["count"], len(s["labels"])),
     )[:MAX_SIGNATURES]
 
-    return {
-        "goal_size": goal_size,
-        "attacks": per_attack,
-        "combined_recovered": total,
-        "combined_coverage": total / goal_size if goal_size else 0.0,
-        "total_runtime_s": runtime if timing_available else None,
-        "permutations_scored": len(effs),
-        "timing_available": timing_available,
-        "milestone_fractions": list(MILESTONES),
-
-        "best": best,
-        "worst": detail(worst[1]) if worst[1] is not None else None,
-        "greedy": {
+    return OrderingResult(
+        goal_size=goal_size,
+        attacks=per_attack,
+        combined_recovered=total,
+        combined_coverage=total / goal_size if goal_size else 0.0,
+        total_runtime_s=runtime if timing_available else None,
+        permutations_scored=len(effs),
+        timing_available=timing_available,
+        milestone_fractions=list(MILESTONES),
+        best=best,
+        worst=detail(worst[1])
+        if worst[1] is not None
+        else best,  # If there is only one element, the worst is the best
+        greedy={
             **greedy_detail,
             "is_optimal": greedy == best_order or greedy_beaten_by == 0,
             "beaten_by": greedy_beaten_by,
         },
         # Compact ranking — order and milestone times only, no per-step curve.
-        "top": [
-            {k: v for k, v in detail(o).items() if k != "steps"}
-            for _, o in ranked
-        ],
+        top=[{k: v for k, v in detail(o).items() if k != "steps"} for _, o in ranked],
         # Best achievable score per opening move: the "what do I run first?"
         # table, and the cheapest thing to act on if you only reorder a bit.
-        "first_choice": sorted(
+        first_choice=sorted(
             (
-                {
-                    "label": labels[i],
-                    "efficiency": best_from[i][0],
-                    "order": [labels[j] for j in best_from[i][1]],
-                }
+                OrderingFirstChoice(
+                    label=labels[i],
+                    efficiency=best_from[i][0],
+                    order=[labels[j] for j in best_from[i][1]],
+                )
                 for i in range(n)
                 if best_from[i] is not None
             ),
             key=lambda e: -e["efficiency"],
         ),
-        "distribution": _distribution(effs),
-        "signatures": signatures,
-    }
+        distribution=_distribution(effs),
+        signatures=signatures,
+    )
 
 
-def _distribution(effs: list[float]) -> dict:
+def _distribution(effs: list[float]) -> OrderingDistribution:
     """Histogram of every ordering's score.
 
     This is what says whether the ranking is worth acting on: a tight spread

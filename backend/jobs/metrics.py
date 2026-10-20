@@ -32,6 +32,8 @@ from __future__ import annotations
 
 from itertools import combinations
 
+from .result import AttackResult, MergabilityResult, PairStats
+
 
 def jaccard(a: set, b: set) -> float:
     """|A ∩ B| / |A ∪ B|. Two empty sets are defined as 0, not 1/0 — an attack
@@ -52,7 +54,7 @@ def mergeability(a: set, b: set) -> float:
     return (len(a | b) - best) / best
 
 
-def pair_stats(label_a: str, a: set, label_b: str, b: set, goal_size: int) -> dict:
+def pair_stats(label_a: str, a: set, label_b: str, b: set, goal_size: int) -> PairStats:
     """Everything the UI shows for one pair, in one place.
 
     `only_a`/`only_b`/`shared` are what the Venn needs, and they are consistent
@@ -78,18 +80,16 @@ def pair_stats(label_a: str, a: set, label_b: str, b: set, goal_size: int) -> di
     }
 
 
-def summarise(recovered: dict[str, set], goal_size: int) -> dict:
+def summarise(recovered: dict[str, set], goal_size: int) -> MergabilityResult:
     """Per-attack coverage plus every pair, given each attack's recovered set.
 
     Pairs are emitted in descending mergeability so the most complementary
     combination is the first thing the user reads.
     """
     per_attack = [
-        {
-            "label": label,
-            "recovered": len(s),
-            "coverage": len(s) / goal_size if goal_size else 0.0,
-        }
+        AttackResult(
+            label=label, recovered=len(s), coverage=len(s) / goal_size if goal_size else 0.0
+        )
         for label, s in recovered.items()
     ]
     pairs = [
