@@ -36,10 +36,12 @@ import socket
 import sys
 import time
 import uuid
+from typing import cast, overload
 
 from backend import config
 from backend.jobs import db, metrics, ordering, wakeup
 from backend.jobs import spec as spec_mod
+from backend.jobs.result import FinalJobResult, MergeabilityResult, OrderingResult
 
 from . import hashcat
 
@@ -195,14 +197,15 @@ def run_job(conn, job: dict) -> dict:
 
 
 def finalize(
-    result: dict,
+    base: MergeabilityResult | OrderingResult,
     recovered: dict[str, set[bytes]],
     runs: list[hashcat.AttackRun],
     warmup: dict[str, float],
     spec: spec_mod.JobSpec,
     started: float,
-) -> dict:
+) -> FinalJobResult:
     # Enrich the returned results dict with more general info
+    result = cast(FinalJobResult, base)
 
     by_label = {r.label: r for r in runs}
     for entry in result["attacks"]:

@@ -111,3 +111,26 @@ class OrderingResult(JobResultBase[OrderingAttackResult]):
     first_choice: list[OrderingFirstChoice]
     distribution: OrderingDistribution
     signatures: list[OrderingSignature]
+
+
+class FinalAttackResult(AttackResult):
+    mode: str
+    partial: bool
+    exit_code: int
+    wordlist: str | None
+    rules: list[str]
+    mask: str | None
+
+
+class FinalJobResult(JobResultBase[FinalAttackResult]):
+    kind: str
+    goal: str
+    goal_rejected: int
+    partial: bool
+    warmup_s: dict[str, float]
+    max_runtime_s: int | None
+    hashcat_version: str
+    started_at: float
+    finished_at: float
+    duration_s: float
+    partial_note: NotRequired[str]
