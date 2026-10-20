@@ -21,7 +21,7 @@ from .. import config
 router = APIRouter(prefix="/api/wordlists", tags=["wordlists"])
 
 
-def _matches(rel_posix: str, ext: str) -> bool:
+def _matches(rel_posix: str, ext: str | tuple[str, ...]) -> bool:
     if ext and not rel_posix.endswith(ext):
         return False
     if config.wordlists_pattern and not config.wordlists_pattern.search(rel_posix):
@@ -47,7 +47,7 @@ def list_files(ext: str = Query("", description="required filename suffix, e.g. 
         if not p.is_file():
             continue
         rel = p.relative_to(config.wordlists_root).as_posix()
-        if _matches(rel, ext):
+        if _matches(rel, tuple(ext.split(","))):
             files.append({"path": rel, "size": p.stat().st_size})
     files.sort(key=lambda f: f["path"])
     return {"enabled": True, "files": files}

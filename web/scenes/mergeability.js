@@ -81,7 +81,7 @@ export async function render(mount, route = "") {
   try {
     [cfg, files] = await Promise.all([
       fetch("/api/jobs/config").then((r) => r.json()),
-      listServerFiles(""),
+      listServerFiles(".dict,.masks,.txt"),
     ]);
   } catch (err) {
     setupBox.innerHTML = `<div class="card danger">could not reach the job API: ${esc(err.message)}</div>`;

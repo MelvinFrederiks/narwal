@@ -99,7 +99,7 @@ export async function render(mount) {
   // No extension filter — either kind is accepted here, detected from content.
   let serverFiles = [];
   let serverFilesLoaded = false;
-  listServerFiles("").then((files) => { serverFiles = files; serverFilesLoaded = true; renderSlots(); });
+  listServerFiles(".dict,.masks,.txt").then((files) => { serverFiles = files; serverFilesLoaded = true; renderSlots(); });
 
   renderSlots();
   refresh();
