@@ -30,7 +30,22 @@ export const STATUS_PILL = {
 export const kindOf = (job) => job?.spec?.kind || "mergeability";
 
 export function emptyAttack() {
-  return { label: "", mode: "wordlist", wordlist: "", rules: [], mask: "" };
+  return { label: "", mode: "wordlist", wordlist: "", rules: [], mask: "", charsets: {} };
+}
+
+// Which custom charsets (?1–?4) a mask references, in order. Mirrors the token
+// walk in backend/jobs/spec.py::_validate_mask — `??` is a literal '?', so the
+// char after a lone '?' is the token and is consumed with it.
+export function maskCharsetRefs(mask) {
+  const refs = new Set();
+  for (let i = 0; i < mask.length; i++) {
+    if (mask[i] !== "?") continue;
+    const n = mask[i + 1];
+    if (n === "?") { i++; continue; }
+    if (n >= "1" && n <= "4") refs.add(n);
+    i++;
+  }
+  return [...refs].sort();
 }
 
 // ── attack builder ─────────────────────────────────────────────────────────
@@ -127,9 +142,21 @@ export function attackBuilder({
           ${needsMask ? `
             <label style="color:var(--text-secondary)">Mask</label>
             <input type="text" data-field="mask" value="${esc(a.mask)}"
-                   placeholder="?u?l?l?l?d?d?d?d" style="font-family:'SF Mono',Menlo,Consolas,monospace"/>` : ""}
+                   placeholder="?u?l?l?l?d?d?d?d" style="font-family:'SF Mono',Menlo,Consolas,monospace"/>
+            <div data-charsets="${i}" style="display:contents">${charsetRowsHtml(a)}</div>` : ""}
         </div>
       </div>`;
+  }
+
+  // One row per custom charset the mask references. Rebuilt in place as the mask
+  // is edited (see wire()), so the boxes appear and disappear without a full
+  // re-render that would steal focus from the mask input.
+  function charsetRowsHtml(a) {
+    return maskCharsetRefs(a.mask).map((d) => `
+      <label style="color:var(--text-secondary)">Charset ?${d}</label>
+      <input type="text" data-charset="${d}" value="${esc(a.charsets?.[d] || "")}"
+             placeholder="e.g. ?l?s or abc0123456789"
+             style="font-family:'SF Mono',Menlo,Consolas,monospace"/>`).join("");
   }
 
   // Pull the three top-level fields into state. Called before every re-render
@@ -145,6 +172,18 @@ export function attackBuilder({
       q(suffix).addEventListener("input", readTop);
     }
 
+    // Bind the charset boxes inside one card's [data-charsets] container to
+    // state. Called on first wire and again whenever the mask edit rebuilds them.
+    function bindCharsets(card, i) {
+      const box = card.querySelector(`[data-charsets="${i}"]`);
+      if (!box) return;
+      for (const input of box.querySelectorAll("[data-charset]")) {
+        input.addEventListener("input", () => {
+          (state.attacks[i].charsets ??= {})[input.dataset.charset] = input.value;
+        });
+      }
+    }
+
     for (const card of mount.querySelectorAll("[data-attack]")) {
       const i = Number(card.dataset.attack);
       for (const input of card.querySelectorAll("[data-field]")) {
@@ -154,6 +193,15 @@ export function attackBuilder({
             state.attacks[i].rules = input.value.split(",").map((s) => s.trim()).filter(Boolean);
           } else {
             state.attacks[i][field] = input.value;
+          }
+          // A mask edit changes which ?1–?4 boxes should exist; rebuild just
+          // this card's charset rows so the mask input keeps focus and caret.
+          if (field === "mask") {
+            const box = card.querySelector(`[data-charsets="${i}"]`);
+            if (box) {
+              box.innerHTML = charsetRowsHtml(state.attacks[i]);
+              bindCharsets(card, i);
+            }
           }
         });
         // Changing the mode changes which fields exist, so this one re-renders.
@@ -165,6 +213,7 @@ export function attackBuilder({
           });
         }
       }
+      bindCharsets(card, i);
       const rm = card.querySelector("[data-remove]");
       if (rm) {
         rm.addEventListener("click", () => {
@@ -211,7 +260,15 @@ export function attacksToSpec(attacks) {
   return attacks.map((a, i) => {
     const out = { label: a.label.trim() || `attack ${i + 1}`, mode: a.mode };
     if (a.mode !== "mask") out.wordlist = a.wordlist.trim();
-    if (a.mode !== "wordlist") out.mask = a.mask.trim();
+    if (a.mode !== "wordlist") {
+      out.mask = a.mask.trim();
+      const cs = {};
+      for (const d of maskCharsetRefs(out.mask)) {
+        const v = (a.charsets?.[d] || "").trim();
+        if (v) cs[d] = v;
+      }
+      if (Object.keys(cs).length) out.charsets = cs;
+    }
     if (a.mode === "wordlist" && a.rules.length) out.rules = a.rules;
     return out;
   });
