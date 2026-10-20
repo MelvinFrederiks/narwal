@@ -87,34 +87,14 @@ def _load_dotenv(path: Path) -> None:
 
 _load_dotenv(_ENV_FILE)
 
-_dir = os.environ.get("NARWAL_WORDLISTS_DIR", "").strip()
-_regex = os.environ.get("NARWAL_WORDLISTS_REGEX", "").strip()
+wordlists_dir = os.environ.get("NARWAL_WORDLISTS_DIR", "").strip()
+wordlists_regex = os.environ.get("NARWAL_WORDLISTS_REGEX", "").strip()
 
-wordlists_root: Path | None = Path(_dir).resolve() if _dir else None
+wordlists_root: Path | None = Path(wordlists_dir).resolve() if wordlists_dir else None
 if wordlists_root is not None and not wordlists_root.is_dir():
     wordlists_root = None
 
-wordlists_pattern: re.Pattern | None = re.compile(_regex) if _regex else None
-
-# ── mergeability job queue ──────────────────────────────────────────────────
-
-runs_dir: Path = Path(os.environ.get("NARWAL_RUNS_DIR", "").strip() or _ROOT / "runs").resolve()
-
-hashcat_bin: str = os.environ.get("NARWAL_HASHCAT_BIN", "").strip() or "hashcat"
-hashcat_force: bool = os.environ.get("NARWAL_HASHCAT_FORCE", "").strip() in ("1", "true", "yes")
-hashcat_extra: list[str] = shlex.split(os.environ.get("NARWAL_HASHCAT_EXTRA", "").strip())
-hashcat_warmup: bool = os.environ.get("NARWAL_HASHCAT_WARMUP", "1").strip() not in ("0", "false", "no")
-
-
-def hashcat_home() -> Path | None:
-    """Directory of the hashcat install, resolved through PATH if need be.
-
-    A hashcat built from source keeps its rules, masks and charsets next to the
-    binary (and, being a "portable" install, writes its kernel cache there too
-    — which is why the bind mount in docker-compose.yml is read-write).
-    """
-    resolved = shutil.which(hashcat_bin)
-    return Path(resolved).resolve().parent if resolved else None
+wordlists_pattern: re.Pattern | None = re.compile(wordlists_regex) if wordlists_regex else None
 
 
 def _default_rules_root() -> Path | None:
@@ -126,10 +106,35 @@ def _default_rules_root() -> Path | None:
     return next((c for c in candidates if c.is_dir()), None)
 
 
-_rules = os.environ.get("NARWAL_RULES_DIR", "").strip()
-rules_root: Path | None = Path(_rules).resolve() if _rules else _default_rules_root()
+rules_dir = os.environ.get("NARWAL_RULES_DIR", "").strip()
+rules_root: Path | None = Path(rules_dir).resolve() if rules_dir else _default_rules_root()
 if rules_root is not None and not rules_root.is_dir():
     rules_root = None
+
+
+# ── mergeability job queue ──────────────────────────────────────────────────
+
+runs_dir: Path = Path(os.environ.get("NARWAL_RUNS_DIR", "").strip() or _ROOT / "runs").resolve()
+
+hashcat_bin: str = os.environ.get("NARWAL_HASHCAT_BIN", "").strip() or "hashcat"
+hashcat_force: bool = os.environ.get("NARWAL_HASHCAT_FORCE", "").strip() in ("1", "true", "yes")
+hashcat_extra: list[str] = shlex.split(os.environ.get("NARWAL_HASHCAT_EXTRA", "").strip())
+hashcat_warmup: bool = os.environ.get("NARWAL_HASHCAT_WARMUP", "1").strip() not in (
+    "0",
+    "false",
+    "no",
+)
+
+
+def hashcat_home() -> Path | None:
+    """Directory of the hashcat install, resolved through PATH if need be.
+
+    A hashcat built from source keeps its rules, masks and charsets next to the
+    binary (and, being a "portable" install, writes its kernel cache there too
+    — which is why the bind mount in docker-compose.yml is read-write).
+    """
+    resolved = shutil.which(hashcat_bin)
+    return Path(resolved).resolve().parent if resolved else None
 
 
 def db_path() -> Path:

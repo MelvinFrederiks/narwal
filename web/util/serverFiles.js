@@ -17,6 +17,18 @@ export async function listServerFiles(ext = "") {
   }
 }
 
+export async function listRuleFiles(ext="") {
+  // TODO Create wrapper around listServerFiles to avoid duplication of logic here
+  try {
+    const res = await fetch(`/api/rules?ext=${encodeURIComponent(ext)}`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.enabled ? data.files : [];
+  } catch {
+    return [];
+  }
+}
+
 // Fetches a server-side file and wraps it as a real File object, so callers
 // can feed it straight into the same code path as a browser-picked upload.
 export async function fetchServerFile(path, ext = "") {

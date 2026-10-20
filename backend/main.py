@@ -26,6 +26,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
+from backend.routes import rules
+
 from .routes import jobs, wordlists
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
@@ -40,7 +42,7 @@ app.add_middleware(
 )
 
 # Add `<module>.router` entries here as endpoints are introduced.
-for router in (wordlists.router, jobs.router):
+for router in (wordlists.router, rules.router, jobs.router):
     app.include_router(router)
 
 
