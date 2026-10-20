@@ -78,10 +78,10 @@ class OrderingStep(TypedDict):
 
 # Info on the simulation of one specific ordering run
 class OrderingSingleRun(TypedDict):
-    order: list
+    order: list[str]
     auc: float
     efficiency: float
-    steps: list
+    steps: NotRequired[list[OrderingStep]]
     milestones: list[MilestoneStat]
     is_optimal: NotRequired[bool]
     beaten_by: NotRequired[int]

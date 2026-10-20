@@ -245,13 +245,13 @@ def describe(
         prev = cur
 
     runtime = elapsed
-    return {
-        "order": [labels[i] for i in order],
-        "auc": auc,
-        "efficiency": auc / (total * runtime) if total and runtime else 0.0,
-        "steps": steps,
-        "milestones": _milestones(steps, total),
-    }
+    return OrderingSingleRun(
+        order=[labels[i] for i in order],
+        auc=auc,
+        efficiency=auc / (total * runtime) if total and runtime else 0.0,
+        steps=steps,
+        milestones=_milestones(steps, total),
+    )
 
 
 def greedy_order(n: int, table: list[int], dur: list[float]) -> tuple[int, ...]:

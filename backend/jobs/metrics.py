@@ -63,21 +63,21 @@ def pair_stats(label_a: str, a: set, label_b: str, b: set, goal_size: int) -> Pa
     """
     shared = len(a & b)
     union = len(a | b)
-    return {
-        "a": label_a,
-        "b": label_b,
-        "recovered_a": len(a),
-        "recovered_b": len(b),
-        "shared": shared,
-        "only_a": len(a) - shared,
-        "only_b": len(b) - shared,
-        "union": union,
-        "jaccard": jaccard(a, b),
-        "mergeability": mergeability(a, b),
+    return PairStats(
+        a=label_a,
+        b=label_b,
+        recovered_a=len(a),
+        recovered_b=len(b),
+        shared=shared,
+        only_a=len(a) - shared,
+        only_b=len(b) - shared,
+        union=union,
+        jaccard=jaccard(a, b),
+        mergeability=mergeability(a, b),
         # What the merged pair covers of the whole goal list — the number that
         # answers "is it worth running both?"
-        "union_coverage": union / goal_size if goal_size else 0.0,
-    }
+        union_coverage=union / goal_size if goal_size else 0.0,
+    )
 
 
 def summarise(recovered: dict[str, set], goal_size: int) -> MergabilityResult:
@@ -99,11 +99,11 @@ def summarise(recovered: dict[str, set], goal_size: int) -> MergabilityResult:
     pairs.sort(key=lambda p: p["mergeability"], reverse=True)
 
     all_union = set().union(*recovered.values()) if recovered else set()
-    return {
-        "goal_size": goal_size,
-        "attacks": per_attack,
-        "pairs": pairs,
+    return MergabilityResult(
+        goal_size=goal_size,
+        attacks=per_attack,
+        pairs=pairs,
         # Ceiling for the whole job: what every attack together covers.
-        "combined_recovered": len(all_union),
-        "combined_coverage": len(all_union) / goal_size if goal_size else 0.0,
-    }
+        combined_recovered=len(all_union),
+        combined_coverage=len(all_union) / goal_size if goal_size else 0.0,
+    )
