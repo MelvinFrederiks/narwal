@@ -5,12 +5,13 @@
 // pointing at what the other scenes are for. Purely informational — no
 // uploads, no charts, nothing parsed here.
 
-import { listServerFiles } from "../util/serverFiles.js";
+import { listServerFiles, listRuleFiles } from "../util/serverFiles.js";
 
 export const name = "home";
 
 const TRACKED_EXTS = [
   { ext: ".dict", label: "Dictionaries", hint: "plain wordlists — one candidate password per line" },
+  { ext: ".rule", label: "Rule files", hint: "Rule files - one rule per line" },
   { ext: ".masks", label: "Mask files", hint: "PACK statsgen output — mask,count per line" },
   { ext: ".json", label: "Analysis runs", hint: "histogram/bivariate results for Analysis results" },
 ];
@@ -75,7 +76,7 @@ export async function render(mount) {
         uploaded — the backend only serves static assets and an optional read-only library of files already
         sitting on the server, browsable below.
       </div>
-      <div id="stats" class="grid-3"></div>
+      <div id="stats" class="grid-2"></div>
     </div>
 
     <div class="panel">
@@ -99,7 +100,14 @@ export async function render(mount) {
     (t) => `<div class="card"><div class="sub" style="margin:0">${escapeHtml(t.label)}</div><div class="loading">loading…</div></div>`
   ).join("");
 
-  const results = await Promise.all(TRACKED_EXTS.map((t) => listServerFiles(t.ext)));
+  const results = await Promise.all(TRACKED_EXTS.map((t) => {
+      if (t.ext == ".rule") {
+        return listRuleFiles(t.ext)
+      } else {
+        return listServerFiles(t.ext)
+      }
+    }));
+
 
   if (results.every((files) => !files.length)) {
     // Could mean either "not configured" or "configured but empty" — either

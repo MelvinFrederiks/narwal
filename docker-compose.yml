@@ -33,6 +33,7 @@ services:
       # fresh clone) when unset, so the feature is a no-op rather than a
       # broken mount.
       - ${NARWAL_WORDLISTS_DIR:-./data}:/mnt/wordlists:ro
+      - ${NARWAL_RULES_DIR:-${NARWAL_HASHCAT_DIR:-./data}/rules}:/mnt/rules:ro
       # Job queue + results. Read-write, and shared with the worker.
       # NARWAL_RUNS_HOST_DIR only exists so the e2e scripts under scripts/ can
       # point at a throwaway directory; leave it unset in normal use.
@@ -40,6 +41,7 @@ services:
     environment:
       - NARWAL_WORDLISTS_DIR=/mnt/wordlists
       - NARWAL_WORDLISTS_REGEX=${NARWAL_WORDLISTS_REGEX:-}
+      - NARWAL_RULES_DIR=/mnt/rules
       - NARWAL_RUNS_DIR=/runs
       - NARWAL_HASHCAT_BIN=/opt/hashcat/hashcat
     restart: unless-stopped
@@ -56,6 +58,7 @@ services:
       # Must resolve to the same files, at the same container path, as the API
       # sees — a job stores wordlist paths relative to this directory.
       - ${NARWAL_WORDLISTS_DIR:-./data}:/mnt/wordlists:ro
+      - ${NARWAL_RULES_DIR:-${NARWAL_HASHCAT_DIR:-./data}/rules}:/mnt/rules:ro
       - ${NARWAL_RUNS_HOST_DIR:-./runs}:/runs
       # Your own hashcat install. Read-WRITE on purpose: a hashcat built from
       # source is a "portable" install, so it keeps its compiled-kernel cache
@@ -74,6 +77,7 @@ services:
     environment:
       - NARWAL_WORDLISTS_DIR=/mnt/wordlists
       - NARWAL_WORDLISTS_REGEX=${NARWAL_WORDLISTS_REGEX:-}
+      - NARWAL_RULES_DIR=/mnt/rules
       - NARWAL_RUNS_DIR=/runs
       - NARWAL_HASHCAT_BIN=/opt/hashcat/hashcat
       # hashcat refuses to run on an OpenCL device it considers outdated, which

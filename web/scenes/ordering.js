@@ -25,7 +25,7 @@
 //
 // Routing: `#ordering` is the builder, `#ordering/<job-id>` shows one result.
 
-import { listServerFiles } from "../util/serverFiles.js";
+import { listServerFiles, listRuleFiles } from "../util/serverFiles.js";
 import {
   MODE_LABELS, attackBuilder, attacksToSpec, emptyAttack, jobList,
   noLibraryHtml, progressText, duration, esc, num, pct,
@@ -81,17 +81,22 @@ export async function render(mount, route = "") {
 
   let cfg = { enabled: false, rules: [], max_ordering_attacks: 8, max_rules: 4 };
   let files = [];
+  let rules = [];
 
   try {
-    [cfg, files] = await Promise.all([
+    [cfg, files, rules] = await Promise.all([
       fetch("/api/jobs/config").then((r) => r.json()),
       listServerFiles(".dict,.masks,.txt"),
+      listRuleFiles(".rule"),
       // List only relevant file types
     ]);
   } catch (err) {
     setupBox.innerHTML = `<div class="card danger">could not reach the job API: ${esc(err.message)}</div>`;
     return;
   }
+
+  // Load rules into config
+  cfg.rules = rules.map(f => f.path)
 
   const maxAttacks = cfg.max_ordering_attacks || cfg.max_attacks || 8;
   const jobs = jobList({

@@ -25,7 +25,7 @@
 // Routing: `#mergeability` is the builder, `#mergeability/<job-id>` shows one
 // result — so a finished analysis is a reloadable, shareable URL.
 
-import { listServerFiles } from "../util/serverFiles.js";
+import { listServerFiles, listRuleFiles } from "../util/serverFiles.js";
 import { vennLayout } from "../util/venn.js";
 import {
   MODE_LABELS, attackBuilder, attacksToSpec, emptyAttack, jobList,
@@ -77,16 +77,21 @@ export async function render(mount, route = "") {
 
   let cfg = { enabled: false, rules: [], max_attacks: 8, max_rules: 4 };
   let files = [];
+  let rules = [];
 
   try {
-    [cfg, files] = await Promise.all([
+    [cfg, files, rules] = await Promise.all([
       fetch("/api/jobs/config").then((r) => r.json()),
       listServerFiles(".dict,.masks,.txt"),
+      rules = listRuleFiles(".rule"),
     ]);
   } catch (err) {
     setupBox.innerHTML = `<div class="card danger">could not reach the job API: ${esc(err.message)}</div>`;
     return;
   }
+
+  // Load rules into config
+  cfg.rules = rules.map(f => f.path)
 
   const jobs = jobList({
     mount: mount.querySelector("#jobs"),
