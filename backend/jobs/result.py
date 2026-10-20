@@ -18,7 +18,7 @@ class JobResultBase(TypedDict, Generic[A]):
     combined_coverage: float
 
 
-# Mergability
+# Mergeability
 # Statistics on overlap between two attacks
 class PairStats(TypedDict):
     a: str
@@ -35,7 +35,7 @@ class PairStats(TypedDict):
 
 
 # Result of a mergability run
-class MergabilityResult(JobResultBase[AttackResult]):
+class MergeabilityResult(JobResultBase[AttackResult]):
     pairs: list[PairStats]
 
 

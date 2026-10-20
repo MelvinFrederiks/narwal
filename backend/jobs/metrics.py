@@ -32,7 +32,7 @@ from __future__ import annotations
 
 from itertools import combinations
 
-from .result import AttackResult, MergabilityResult, PairStats
+from .result import AttackResult, MergeabilityResult, PairStats
 
 
 def jaccard(a: set, b: set) -> float:
@@ -80,7 +80,7 @@ def pair_stats(label_a: str, a: set, label_b: str, b: set, goal_size: int) -> Pa
     )
 
 
-def summarise(recovered: dict[str, set], goal_size: int) -> MergabilityResult:
+def summarise(recovered: dict[str, set], goal_size: int) -> MergeabilityResult:
     """Per-attack coverage plus every pair, given each attack's recovered set.
 
     Pairs are emitted in descending mergeability so the most complementary
@@ -99,7 +99,7 @@ def summarise(recovered: dict[str, set], goal_size: int) -> MergabilityResult:
     pairs.sort(key=lambda p: p["mergeability"], reverse=True)
 
     all_union = set().union(*recovered.values()) if recovered else set()
-    return MergabilityResult(
+    return MergeabilityResult(
         goal_size=goal_size,
         attacks=per_attack,
         pairs=pairs,
