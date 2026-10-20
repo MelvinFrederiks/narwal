@@ -96,11 +96,15 @@ if wordlists_root is not None and not wordlists_root.is_dir():
 
 wordlists_pattern: re.Pattern | None = re.compile(wordlists_regex) if wordlists_regex else None
 
+hashcat_bin: str = os.environ.get("NARWAL_HASHCAT_BIN", "").strip() or "hashcat"
+
 
 def _default_rules_root() -> Path | None:
     """hashcat's own rules directory: the custom install's first, then the
     distribution location a system hashcat would use."""
-    home = hashcat_home()
+
+    hashcat_resolved = shutil.which(hashcat_bin)
+    home = Path(hashcat_resolved).resolve().parent if hashcat_resolved else None
     candidates = [home / "rules"] if home else []
     candidates.append(Path("/usr/share/hashcat/rules"))
     return next((c for c in candidates if c.is_dir()), None)
@@ -116,7 +120,6 @@ if rules_root is not None and not rules_root.is_dir():
 
 runs_dir: Path = Path(os.environ.get("NARWAL_RUNS_DIR", "").strip() or _ROOT / "runs").resolve()
 
-hashcat_bin: str = os.environ.get("NARWAL_HASHCAT_BIN", "").strip() or "hashcat"
 hashcat_force: bool = os.environ.get("NARWAL_HASHCAT_FORCE", "").strip() in ("1", "true", "yes")
 hashcat_extra: list[str] = shlex.split(os.environ.get("NARWAL_HASHCAT_EXTRA", "").strip())
 hashcat_warmup: bool = os.environ.get("NARWAL_HASHCAT_WARMUP", "1").strip() not in (
@@ -124,17 +127,6 @@ hashcat_warmup: bool = os.environ.get("NARWAL_HASHCAT_WARMUP", "1").strip() not 
     "false",
     "no",
 )
-
-
-def hashcat_home() -> Path | None:
-    """Directory of the hashcat install, resolved through PATH if need be.
-
-    A hashcat built from source keeps its rules, masks and charsets next to the
-    binary (and, being a "portable" install, writes its kernel cache there too
-    — which is why the bind mount in docker-compose.yml is read-write).
-    """
-    resolved = shutil.which(hashcat_bin)
-    return Path(resolved).resolve().parent if resolved else None
 
 
 def db_path() -> Path:
