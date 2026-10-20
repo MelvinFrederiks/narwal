@@ -76,7 +76,7 @@ export async function render(mount) {
         uploaded — the backend only serves static assets and an optional read-only library of files already
         sitting on the server, browsable below.
       </div>
-      <div id="stats" class="grid-3"></div>
+      <div id="stats" class="grid-2"></div>
     </div>
 
     <div class="panel">
