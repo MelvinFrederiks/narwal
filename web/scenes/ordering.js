@@ -573,7 +573,7 @@ export async function render(mount, route = "") {
         // (0, 0) then one point per finished attack. Straight segments between
         // them are exactly the model the score integrates — see the caption.
         data: [{ x: 0, y: 0 }].concat(
-          o.steps.map((s) => ({ x: C.cum(s), y: s.cumulative_coverage * 100, _step: s }))
+          o.steps.map((s) => ({ x: C.cum(s), y: s.cumulative, _step: s }))
         ),
         borderColor: c.color,
         backgroundColor: c.color,
@@ -617,8 +617,8 @@ export async function render(mount, route = "") {
           },
           y: {
             beginAtZero: true,
-            title: { display: true, text: "% of goal list recovered", color: cssVar("--text-secondary") },
-            ticks: { color: cssVar("--text-secondary"), callback: (v) => `${v}%` },
+            title: { display: true, text: "passwords recovered", color: cssVar("--text-secondary") },
+            ticks: { color: cssVar("--text-secondary"), callback: (v) => num(v) },
             grid: { color: cssVar("--surface-3") },
           },
         },
