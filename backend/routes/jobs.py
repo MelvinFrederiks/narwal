@@ -41,9 +41,10 @@ def job_config() -> dict:
         "kinds": list(spec_mod.KINDS),
         "rules": [],  # Will be set on page load for now
         "max_attacks": spec_mod.MAX_ATTACKS,
-        # An ordering job enumerates every permutation, so its own cap is
-        # lower (or equal) and the builder has to know which one applies.
-        "max_ordering_attacks": min(spec_mod.MAX_ATTACKS, ordering.MAX_ORDER_ATTACKS),
+        # An ordering job has its own (higher) cap — it beam-searches above the
+        # exact-enumeration threshold instead of enumerating every permutation,
+        # so the builder has to know which one applies.
+        "max_ordering_attacks": ordering.MAX_ORDER_ATTACKS,
         "max_rules": spec_mod.MAX_RULES,
     }
 
