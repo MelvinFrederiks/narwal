@@ -263,7 +263,16 @@ def test_ordering_job_end_to_end(env):
     assert by_label["subset"]["recovered"] == 1
     assert by_label["subset"]["exclusive"] == 0
 
-    # Real wall-clock timings came back, and they are what the ranking used.
+    # Guess counts came back from hashcat's status lines, exactly, and they
+    # are what the ranking used. A plain wordlist costs one guess per line; a
+    # mask that cracks only part of the goal runs its whole keyspace.
+    assert r["cost_axis"] == "guesses"
+    assert by_label["dict"]["guesses"] == len(WL_A)
+    assert by_label["subset"]["guesses"] == 1
+    assert by_label["sixlower"]["guesses"] == 26**6
+    assert r["total_guesses"] == sum(a["guesses"] for a in r["attacks"])
+
+    # Wall-clock timings still come along for display.
     assert r["timing_available"] is True
     assert all(a["duration_s"] > 0 for a in r["attacks"])
     assert r["total_runtime_s"] == pytest.approx(
@@ -275,13 +284,14 @@ def test_ordering_job_end_to_end(env):
     assert len(cumulative) == 3
     assert cumulative == sorted(cumulative)
     assert cumulative[-1] == 4
+    assert r["best"]["steps"][-1]["cumulative_guesses"] == r["total_guesses"]
     assert r["best"]["steps"][-1]["elapsed_s"] == pytest.approx(r["total_runtime_s"])
 
-    # `subset` can never be the only way to a password, so it contributes
-    # nothing wherever it lands after one of the others. Which exact slot it
-    # takes depends on the measured runtimes, so that is not asserted — but the
-    # slow brute force must never open an optimal sequence.
-    assert r["best"]["order"][0] != "sixlower"
+    # Ranked by guesses, the answer no longer depends on this host's speed:
+    # `dict` finds 3 in 4 guesses, the brute force adds the last one, and
+    # `subset` — which adds nothing new after `dict` — goes last, where its
+    # guess no longer delays anything.
+    assert r["best"]["order"] == ["dict", "sixlower", "subset"]
     assert r["best"]["steps"][-1]["cumulative"] == 4
     assert r["best"]["efficiency"] >= r["worst"]["efficiency"]
     assert r["greedy"]["efficiency"] <= r["best"]["efficiency"] + 1e-12
@@ -293,7 +303,7 @@ def test_warm_up_takes_the_kernel_compile_out_of_the_measurement(env, monkeypatc
 
     hashcat compiles an OpenCL kernel the first time it sees a given attack
     mode. Without a warm-up that cost is charged to whichever attack used the
-    mode first, and an ordering job schedules against exactly those durations.
+    mode first, and an ordering result reports exactly those durations.
     Here both attacks are the same wordlist against the same goal list, so
     their true costs are identical — any large gap between them is compilation,
     not work.

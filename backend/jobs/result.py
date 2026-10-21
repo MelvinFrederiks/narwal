@@ -41,6 +41,8 @@ class MergeabilityResult(JobResultBase[AttackResult]):
 
 # Ordering
 class OrderingAttackResult(AttackResult):
+    guesses: int | None
+    rate_per_guess: float | None
     duration_s: float | None
     rate_per_s: float | None
     exclusive: int
@@ -57,20 +59,29 @@ class OrderingDistribution(TypedDict):
 
 
 # Of a single ordering run, the info on the status when the milestones (25%, 50%, etc) are crossed
+# `cost` is on the ranking's axis (see OrderingResult.cost_axis); `guesses` and
+# `time_s` are the same point in each unit, when that unit was measured.
 class MilestoneStat(TypedDict):
     fraction: float
     target: int
+    cost: float | None
+    guesses: int | None
     time_s: float | None
     after: str | None
 
 
 # Info of one step (one attack) in a single ordering run
+# `cost` is on the ranking's axis; guesses and seconds are present when measured.
 class OrderingStep(TypedDict):
     label: str
-    duration_s: float
-    elapsed_s: float
+    cost: float
+    cumulative_cost: float
+    guesses: NotRequired[int]
+    cumulative_guesses: NotRequired[int]
+    duration_s: NotRequired[float]
+    elapsed_s: NotRequired[float]
     gain: int
-    gain_rate: float
+    gain_per_cost: float
     cumulative: int
     cumulative_coverage: float
     cumulative_share: float
@@ -101,6 +112,9 @@ class OrderingFirstChoice(TypedDict):
 
 # Aggregated results of 'the ordering analysis'
 class OrderingResult(JobResultBase[OrderingAttackResult]):
+    # What the score integrates over: "guesses", or "time" / "equal" as fallbacks
+    cost_axis: str
+    total_guesses: int | None
     total_runtime_s: float | None
     permutations_scored: int
     timing_available: bool
@@ -136,6 +150,8 @@ class FinalJobResult(JobResultBase[FinalAttackResult]):
     duration_s: float
     partial_note: NotRequired[str]
     # Ordering specific
+    cost_axis: NotRequired[str]
+    total_guesses: NotRequired[int | None]
     total_runtime_s: NotRequired[float | None]
     permutations_scored: NotRequired[int]
     timing_available: NotRequired[bool]

@@ -4,22 +4,25 @@
 // attack is worth running; this one takes the attacks as already decided and
 // asks in what **sequence** to run them so that the cracked count climbs as
 // steeply as possible. Same queue, same hashcat work, different question —
-// and the answer is worth real time, because two sequences of the same attacks
-// finish together with the same total while one of them may have found 80% of
-// its haul in the first few minutes.
+// and the answer is worth real work, because two sequences of the same attacks
+// make the same total number of guesses while one of them may have found 80%
+// of its haul in the first fraction of them.
 //
 // The thing to understand about the cost: scoring an ordering needs nothing but
-// each attack's recovered set and its measured runtime, neither of which
-// depends on where the attack sits in the sequence (`--potfile-disable` means
-// every attack is run against the full goal list and never sees another's
-// results). So the worker runs each attack **once** — exactly as a mergeability
-// job does — and backend/jobs/ordering.py then scores all N! permutations
-// exactly, in milliseconds. 8 attacks is 40,320 sequences off 8 hashcat runs.
+// each attack's recovered set and its guess count, neither of which depends on
+// where the attack sits in the sequence (`--potfile-disable` means every attack
+// is run against the full goal list and never sees another's results). So the
+// worker runs each attack **once** — exactly as a mergeability job does — and
+// backend/jobs/ordering.py then scores all N! permutations exactly, in
+// milliseconds. 8 attacks is 40,320 sequences off 8 hashcat runs.
 //
-// The headline number is `efficiency`: the area under the cracked-vs-time curve
-// normalised by (total recovered × total runtime), so 1 would be "everything
-// instantly" and 0.5 is "recovery grew linearly with the clock". Both of those
-// denominators are identical for every sequence, which is what makes the
+// The headline number is `efficiency`: the area under the cracked-vs-guesses
+// curve normalised by (total recovered × total guesses), so 1 would be
+// "everything found at once" and 0.5 is "recovery grew linearly with guesses".
+// Guesses, not seconds, because a guess count belongs to the attack while a
+// duration also depends on the machine — but if the backend could not record
+// guess counts it falls back to time, and `cost_axis` says which was used.
+// Both denominators are identical for every sequence, which is what makes the
 // comparison fair — see the module docstring in backend/jobs/ordering.py for
 // the one modelling assumption involved.
 //
@@ -50,10 +53,10 @@ export async function render(mount, route = "") {
       <h2>Attack order</h2>
       <div class="sub">
         You have decided which attacks to run. This works out <b>in what order</b> to run them so
-        passwords turn up as early as possible — the total haul and the total runtime are the same
-        whichever sequence you pick, but how soon you get there is not. Every permutation is scored
-        exhaustively; the worker still only runs each attack once, because an attack recovers the
-        same set in the same time wherever it sits in the sequence.
+        passwords turn up as early as possible — the total haul and the total number of guesses are
+        the same whichever sequence you pick, but how soon you get there is not. Every permutation is
+        scored exhaustively; the worker still only runs each attack once, because an attack recovers
+        the same set with the same guesses wherever it sits in the sequence.
       </div>
       <div id="setup"></div>
       <div id="builder"></div>
@@ -177,9 +180,10 @@ export async function render(mount, route = "") {
     }
 
     const r = job.result;
+    const C = costCtx(r);
     const best = r.best;
     const worst = r.worst;
-    // Time to half the haul, best against worst: the single number that says
+    // Cost to half the haul, best against worst: the single number that says
     // whether reordering is worth anybody's attention.
     const saved = halfOf(worst) != null && halfOf(best) != null
       ? halfOf(worst) - halfOf(best)
@@ -191,13 +195,21 @@ export async function render(mount, route = "") {
         <div class="sub">
           Goal <code>${esc(r.goal)}</code> — ${num(r.goal_size)} distinct passwords.
           ${num(r.permutations_scored)} sequences scored from ${r.attacks.length} hashcat runs
-          totalling ${duration(r.total_runtime_s)}, on hashcat ${esc(r.hashcat_version || "?")}.
+          ${C.guesses ? `totalling ${guessFmt(r.total_guesses)} guesses` : `totalling ${duration(r.total_runtime_s)}`}${
+            C.guesses && r.total_runtime_s != null ? ` (${duration(r.total_runtime_s)})` : ""
+          }, on hashcat ${esc(r.hashcat_version || "?")}.
         </div>
 
         ${r.partial ? `<div class="card warning">${esc(r.partial_note)}</div>` : ""}
-        ${!r.timing_available ? `<div class="card warning">
-          No per-attack runtimes were recorded, so every attack was weighted equally. The sequence
-          below still reflects which attacks make others redundant, but not what they cost.
+        ${C.axis === "time" && r.cost_axis ? `<div class="card warning">
+          hashcat did not report a guess count for every attack, so the sequence below is ranked by
+          <b>measured runtime</b> instead — which depends on this host and its kernel-cache state, not
+          on the attacks alone. Treat the order as advisory.
+        </div>` : ""}
+        ${C.axis === "equal" ? `<div class="card warning">
+          Neither guess counts nor per-attack runtimes were recorded, so every attack was weighted
+          equally. The sequence below still reflects which attacks make others redundant, but not
+          what they cost.
         </div>` : ""}
         ${r.goal_rejected ? `<div class="card warning" style="margin-top:8px">
           hashcat rejected ${num(r.goal_rejected)} line(s) of the goal file — over its 256-character
@@ -207,13 +219,14 @@ export async function render(mount, route = "") {
 
         ${headlineHtml(r, best, worst, saved)}
 
-        <div style="font-weight:500;margin:22px 0 8px">Recovery over time</div>
+        <div style="font-weight:500;margin:22px 0 8px">Recovery over ${C.noun}</div>
         <div class="chart-wrap" style="height:340px"><canvas id="or-curve"></canvas></div>
         <div class="sub" style="font-size:12px;margin-top:6px">
           Each marker is the end of one attack. Within an attack recovery is drawn as a straight
-          line, because hashcat reports how many goal entries an attack found and how long it took
-          but not which entry it found at which second — so the markers are measured and the lines
-          between them are the one assumption in here.
+          line, because hashcat reports how many goal entries an attack found and ${
+            C.guesses ? "how many guesses it made but not which entry it found at which guess"
+            : "how long it took but not which entry it found at which second"
+          } — so the markers are measured and the lines between them are the one assumption in here.
         </div>
 
         <div style="font-weight:500;margin:22px 0 8px">The recommended run order</div>
@@ -262,13 +275,17 @@ export async function render(mount, route = "") {
 
         <div class="note">
           <b>Score</b> is the area under the recovery curve divided by (total recovered × total
-          runtime): 1 would be everything found instantly, 0.5 means recovery kept pace with the
-          clock, and above 0.5 means the sequence is front-loaded. Both divisors are the same for
-          every sequence, so the ranking is unaffected by the normalisation — it only makes the
-          number readable. <b>Greedy</b> is the obvious heuristic (always run whichever attack adds
-          the most new passwords per second next); it is shown because it is not always right —
-          an attack can look productive until the attack that would have duplicated it has been
-          taken out of the pool, which is why every permutation is scored instead.
+          ${C.guesses ? "guesses" : "runtime"}): 1 would be everything found
+          ${C.guesses ? "at once" : "instantly"}, 0.5 means recovery kept pace with
+          ${C.guesses ? "the guesses spent" : "the clock"}, and above 0.5 means the sequence is
+          front-loaded. Both divisors are the same for every sequence, so the ranking is unaffected
+          by the normalisation — it only makes the number readable.
+          ${C.guesses ? `Guesses, not seconds, are the axis because a guess count belongs to the
+          attack while a runtime also depends on the machine and the kernel cache.` : ""}
+          <b>Greedy</b> is the obvious heuristic (always run whichever attack adds the most new
+          passwords per ${C.guesses ? "guess" : "second"} next); it is shown because it is not always
+          right — an attack can look productive until the attack that would have duplicated it has
+          been taken out of the pool, which is why every permutation is scored instead.
         </div>
         <div class="sub" style="margin-top:10px">
           Wondering whether an attack earns its place at all? <a href="#mergeability">Mergeability</a>
@@ -280,6 +297,7 @@ export async function render(mount, route = "") {
   }
 
   function headlineHtml(r, best, worst, saved) {
+    const C = costCtx(r);
     const greedy = r.greedy;
     const seq = (o) => (o?.order || []).map((l, i) =>
       `${i ? `<span style="color:var(--text-tertiary);margin:0 4px">→</span>` : ""}
@@ -295,41 +313,47 @@ export async function render(mount, route = "") {
         <div style="line-height:2">${seq(best)}</div>
         <div style="margin-top:10px;font-size:13px">
           Together these recover <b>${num(r.combined_recovered)}</b> of ${num(r.goal_size)}
-          goal passwords (<b>${pct(r.combined_coverage, 1)}%</b>) in
-          ${duration(r.total_runtime_s)} — the same haul in the same time as any other sequence.
+          goal passwords (<b>${pct(r.combined_coverage, 1)}%</b>)
+          ${C.total != null ? `for ${C.fmt(C.total)}${C.guesses ? " guesses" : ""}` : ""} — the
+          same haul for the same ${C.guesses ? "guesses" : "time"} as any other sequence.
           ${saved != null && saved > 0 ? `
-            This one is halfway there after <b>${duration(halfOf(best))}</b>; the worst sequence
-            takes <b>${duration(halfOf(worst))}</b> to reach the same point, so the order is worth
-            <b>${duration(saved)}</b>.`
+            This one is halfway there after <b>${C.fmt(halfOf(best))}${C.guesses ? " guesses" : ""}</b>;
+            the worst sequence takes <b>${C.fmt(halfOf(worst))}${C.guesses ? " guesses" : ""}</b> to
+            reach the same point, so the order is worth <b>${C.fmt(saved)}${C.guesses ? " guesses" : ""}</b>.`
             : saved != null ? `
-            Every sequence reaches halfway at about the same time here, so the order makes little
+            Every sequence reaches halfway at about the same point here, so the order makes little
             practical difference for these attacks.` : ""}
         </div>
       </div>
       <div class="card ${greedy.is_optimal ? "info" : "warning"}" style="margin-top:8px;font-size:13px">
         ${greedy.is_optimal
-          ? `Picking greedily — always the best new-passwords-per-second next — happens to land on
-             an optimal sequence here. Enumerating every permutation is what establishes that.`
+          ? `Picking greedily — always the best new-passwords-per-${C.guesses ? "guess" : "second"}
+             next — happens to land on an optimal sequence here. Enumerating every permutation is
+             what establishes that.`
           : `Picking greedily would have given <span style="line-height:2">${seq(greedy)}</span>
              at ${pct(greedy.efficiency, 1)}%, which ${num(greedy.beaten_by)}
              sequence${greedy.beaten_by === 1 ? "" : "s"} beat.`}
       </div>`;
   }
 
+  // Cost (guesses, or seconds for an old result) at the 50% milestone — the
+  // one number that says whether reordering is worth anybody's attention.
   function halfOf(o) {
-    return o?.milestones?.find((m) => m.fraction === 0.5)?.time_s ?? null;
+    const m = o?.milestones?.find((m) => m.fraction === 0.5);
+    return m ? (m.cost ?? m.time_s ?? null) : null;
   }
 
   function stepsTableHtml(best, r) {
     const n = "text-align:right;font-variant-numeric:tabular-nums";
+    const C = costCtx(r);
     return `
       <div style="overflow:auto"><table style="border-collapse:collapse;font-size:12px;min-width:640px">
         <thead><tr style="color:var(--text-secondary);text-align:left">
           <th style="padding:4px 12px 4px 0;font-weight:500">#</th>
           <th style="padding:4px 12px 4px 0;font-weight:500">Attack</th>
-          <th style="padding:4px 12px 4px 0;font-weight:500;${n}">Takes</th>
+          <th style="padding:4px 12px 4px 0;font-weight:500;${n}">${C.takesCol}</th>
           <th style="padding:4px 12px 4px 0;font-weight:500;${n}">New</th>
-          <th style="padding:4px 12px 4px 0;font-weight:500;${n}">New rate</th>
+          <th style="padding:4px 12px 4px 0;font-weight:500;${n}">${C.rateCol}</th>
           <th style="padding:4px 12px 4px 0;font-weight:500;${n}">Done at</th>
           <th style="padding:4px 0;font-weight:500;${n}">Goal covered</th>
         </tr></thead>
@@ -338,10 +362,10 @@ export async function render(mount, route = "") {
             <tr>
               <td style="padding:5px 12px 5px 0;color:var(--text-tertiary)">${i + 1}</td>
               <td style="padding:5px 12px 5px 0"><b>${esc(s.label)}</b></td>
-              <td style="padding:5px 12px 5px 0;${n}">${duration(s.duration_s)}</td>
+              <td style="padding:5px 12px 5px 0;${n}">${C.fmt(C.one(s))}</td>
               <td style="padding:5px 12px 5px 0;${n}">${num(s.gain)}</td>
-              <td style="padding:5px 12px 5px 0;${n}">${rate(s.gain_rate)}</td>
-              <td style="padding:5px 12px 5px 0;${n}">${duration(s.elapsed_s)}</td>
+              <td style="padding:5px 12px 5px 0;${n}">${C.rateFmt(C.gainRate(s))}</td>
+              <td style="padding:5px 12px 5px 0;${n}">${C.fmt(C.cum(s))}</td>
               <td style="padding:5px 0;${n}"><b>${pct(s.cumulative_coverage, 1)}%</b></td>
             </tr>`).join("")}
         </tbody>
@@ -355,6 +379,7 @@ export async function render(mount, route = "") {
 
   function milestonesHtml(r, best, worst) {
     const n = "text-align:right;font-variant-numeric:tabular-nums";
+    const C = costCtx(r);
     const byFraction = (o) => new Map((o?.milestones || []).map((m) => [m.fraction, m]));
     const bm = byFraction(best), wm = byFraction(worst), gm = byFraction(r.greedy);
     return `
@@ -369,15 +394,16 @@ export async function render(mount, route = "") {
         <tbody>
           ${r.milestone_fractions.map((f) => {
             const b = bm.get(f), w = wm.get(f), g = gm.get(f);
-            const delta = (w?.time_s != null && b?.time_s != null) ? w.time_s - b.time_s : null;
+            const bc = C.ms(b), wc = C.ms(w);
+            const delta = (wc != null && bc != null) ? wc - bc : null;
             return `
               <tr>
                 <td style="padding:5px 12px 5px 0">${pct(f, 0)}%${f === 1 ? " (everything)" : ""}</td>
                 <td style="padding:5px 12px 5px 0;${n}">${num(b?.target)}</td>
-                <td style="padding:5px 12px 5px 0;${n}"><b>${duration(b?.time_s)}</b></td>
-                <td style="padding:5px 12px 5px 0;${n}">${duration(g?.time_s)}</td>
-                <td style="padding:5px 12px 5px 0;${n}">${duration(w?.time_s)}</td>
-                <td style="padding:5px 0;${n}">${delta ? duration(delta) : "—"}</td>
+                <td style="padding:5px 12px 5px 0;${n}"><b>${C.fmt(bc)}</b></td>
+                <td style="padding:5px 12px 5px 0;${n}">${C.fmt(C.ms(g))}</td>
+                <td style="padding:5px 12px 5px 0;${n}">${C.fmt(wc)}</td>
+                <td style="padding:5px 0;${n}">${delta ? C.fmt(delta) : "—"}</td>
               </tr>`;
           }).join("")}
         </tbody>
@@ -390,6 +416,7 @@ export async function render(mount, route = "") {
   }
 
   function attackBarHtml(a, r) {
+    const C = costCtx(r);
     const detail = a.mode === "mask"
       ? `<code>${esc(a.mask || "")}</code>`
       : [a.wordlist ? `<code>${esc(a.wordlist)}</code>` : "",
@@ -405,14 +432,18 @@ export async function render(mount, route = "") {
           <span class="sub" style="margin:0;font-size:11px">${detail}</span>
           ${a.partial ? `<span class="pill pill-warning" style="font-size:10px">stopped early</span>` : ""}
           <span style="margin-left:auto;font-variant-numeric:tabular-nums">
-            ${num(a.recovered)} in ${duration(a.duration_s)} · <b>${pct(a.coverage, 1)}%</b>
+            ${num(a.recovered)} in
+            ${C.guesses ? `${guessFmt(a.guesses)} guesses` : duration(a.duration_s)}
+            · <b>${pct(a.coverage, 1)}%</b>
           </span>
         </div>
         <div style="height:6px;background:var(--surface-3);border-radius:3px;overflow:hidden;margin-top:4px">
           <div style="height:100%;width:${(a.coverage * 100).toFixed(1)}%;background:${CURVES[0].color}"></div>
         </div>
         <div class="sub" style="margin:4px 0 0;font-size:11px">
-          ${a.rate_per_s != null ? `recovers ${rate(a.rate_per_s)} on its own` : "runtime not recorded"}
+          ${C.guesses
+            ? (a.rate_per_guess != null ? `recovers ${perGuess(a.rate_per_guess)} on its own` : "guess count not recorded")
+            : (a.rate_per_s != null ? `recovers ${rate(a.rate_per_s)} on its own` : "runtime not recorded")}
           · <b>${num(a.exclusive)}</b> password${a.exclusive === 1 ? "" : "s"} only this attack finds
           ${a.exclusive === 0 ? " — everything it recovers, something else recovers too" : ""}
         </div>
@@ -508,6 +539,7 @@ export async function render(mount, route = "") {
 
   function rankingHtml(r) {
     const n = "text-align:right;font-variant-numeric:tabular-nums";
+    const C = costCtx(r);
     return `
       <div style="overflow:auto"><table style="border-collapse:collapse;font-size:12px;min-width:560px">
         <thead><tr style="color:var(--text-secondary);text-align:left">
@@ -521,7 +553,7 @@ export async function render(mount, route = "") {
             <tr style="${i === 0 ? "background:var(--surface-2)" : ""}">
               <td style="padding:5px 12px 5px 0;color:var(--text-tertiary)">${i + 1}</td>
               <td style="padding:5px 12px 5px 0">${e.order.map(esc).join(" → ")}</td>
-              <td style="padding:5px 12px 5px 0;${n}">${duration(halfOf(e))}</td>
+              <td style="padding:5px 12px 5px 0;${n}">${C.fmt(halfOf(e))}${C.guesses ? " guesses" : ""}</td>
               <td style="padding:5px 0;${n}">${i === 0 ? "<b>" : ""}${pct(e.efficiency, 1)}%${i === 0 ? "</b>" : ""}</td>
             </tr>`).join("")}
         </tbody>
@@ -532,6 +564,7 @@ export async function render(mount, route = "") {
   function drawCurve(r) {
     const canvas = resultBox.querySelector("#or-curve");
     if (!canvas || typeof Chart === "undefined") return;
+    const C = costCtx(r);
 
     const datasets = CURVES.filter((c) => r[c.key]).map((c) => {
       const o = r[c.key];
@@ -540,7 +573,7 @@ export async function render(mount, route = "") {
         // (0, 0) then one point per finished attack. Straight segments between
         // them are exactly the model the score integrates — see the caption.
         data: [{ x: 0, y: 0 }].concat(
-          o.steps.map((s) => ({ x: s.elapsed_s, y: s.cumulative_coverage * 100, _step: s }))
+          o.steps.map((s) => ({ x: C.cum(s), y: s.cumulative_coverage * 100, _step: s }))
         ),
         borderColor: c.color,
         backgroundColor: c.color,
@@ -564,7 +597,7 @@ export async function render(mount, route = "") {
           legend: { labels: { color: cssVar("--text-secondary"), usePointStyle: true } },
           tooltip: {
             callbacks: {
-              title: (items) => `after ${duration(items[0].parsed.x)}`,
+              title: (items) => `after ${C.fmt(items[0].parsed.x)}${C.guesses ? " guesses" : ""}`,
               label: (ctx) => {
                 const step = ctx.raw?._step;
                 if (!step) return `${ctx.dataset.label}: nothing yet`;
@@ -578,8 +611,8 @@ export async function render(mount, route = "") {
           x: {
             type: "linear",
             min: 0,
-            title: { display: true, text: "elapsed", color: cssVar("--text-secondary") },
-            ticks: { color: cssVar("--text-secondary"), callback: (v) => duration(v) },
+            title: { display: true, text: C.xTitle, color: cssVar("--text-secondary") },
+            ticks: { color: cssVar("--text-secondary"), callback: (v) => C.fmt(v) },
             grid: { color: cssVar("--surface-3") },
           },
           y: {
@@ -624,6 +657,55 @@ function rate(v) {
   if (v >= 1) return `${v.toFixed(1)}/s`;
   if (v * 60 >= 1) return `${(v * 60).toFixed(v * 60 >= 10 ? 0 : 1)}/min`;
   return `${(v * 3600).toFixed(v * 3600 >= 10 ? 0 : 1)}/h`;
+}
+
+// Compact guess counts, since a real mask is millions to trillions of
+// candidates: 456,976 → "457K", 11,900,000 → "11.9M".
+function guessFmt(n) {
+  if (n == null) return "—";
+  n = Number(n);
+  if (n < 1000) return n.toLocaleString();
+  for (const [base, suf] of [[1e12, "T"], [1e9, "B"], [1e6, "M"], [1e3, "K"]]) {
+    if (n >= base) {
+      const v = n / base;
+      return `${v >= 100 ? Math.round(v) : v.toFixed(1)}${suf}`;
+    }
+  }
+  return n.toLocaleString();
+}
+
+// Recovered-per-guess rate. For anything but a tiny wordlist this is far below
+// one, so "1 per N guesses" reads better than "0.00003/guess".
+function perGuess(v) {
+  if (v == null || !isFinite(v) || v <= 0) return "—";
+  if (v >= 1) return `${v >= 10 ? Math.round(v).toLocaleString() : v.toFixed(1)}/guess`;
+  return `1 per ${guessFmt(Math.round(1 / v))} guesses`;
+}
+
+// The axis a result is scored on, with the readers and formatters its tables
+// and chart need. Results stored before this change have no `cost_axis` and
+// lack the generic `cost` fields, so everything falls back to the duration
+// fields they do have — they keep rendering in seconds exactly as before.
+function costCtx(r) {
+  const axis = r.cost_axis || "time";
+  const guesses = axis === "guesses";
+  return {
+    axis,
+    guesses,
+    total: guesses ? r.total_guesses : r.total_runtime_s,
+    fmt: guesses ? guessFmt : duration,
+    rateFmt: guesses ? perGuess : rate,
+    // Per-step cost, cumulative cost, new-per-cost; milestone cost.
+    one: (s) => s.cost ?? s.duration_s,
+    cum: (s) => s.cumulative_cost ?? s.elapsed_s,
+    gainRate: (s) => s.gain_per_cost ?? s.gain_rate,
+    ms: (m) => m?.cost ?? m?.time_s,
+    // Words for column headers and captions.
+    noun: guesses ? "guesses" : "time",
+    takesCol: guesses ? "Guesses" : "Takes",
+    rateCol: guesses ? "New / guess" : "New rate",
+    xTitle: guesses ? "guesses" : "elapsed",
+  };
 }
 
 function factorialText(n) {
