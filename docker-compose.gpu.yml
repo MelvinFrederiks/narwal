@@ -2,9 +2,12 @@
 #
 #   docker compose -f docker-compose.yml -f docker-compose.gpu.yml up
 #
-# Requires the NVIDIA Container Toolkit on the host. It injects the driver's
-# OpenCL ICD into the container, which hashcat then finds and prefers over the
-# PoCL CPU device baked into the image.
+# Requires the NVIDIA Container Toolkit on the host. With the `compute`
+# capability (below) it injects the driver's OpenCL *library*
+# (libnvidia-opencl.so.1) — but on many hosts it does NOT drop the ICD loader
+# file that lists it, so hashcat finds no GPU and silently falls back to the
+# PoCL CPU device baked into the image, reporting a CPU hashrate with no error.
+# The `command:` wrapper below writes that ICD file so hashcat prefers the GPU.
 #
 # NARWAL_HASHCAT_FORCE is cleared here: --force exists to get past hashcat's
 # refusal to use the outdated PoCL CPU runtime, and on a real GPU those
@@ -18,6 +21,23 @@
 
 services:
   narwal-worker:
+    # Ensure the NVIDIA OpenCL ICD loader file exists, then hand off to the
+    # worker's normal entrypoint. The toolkit injects libnvidia-opencl.so.1 but
+    # frequently not /etc/OpenCL/vendors/nvidia.icd, and without that file
+    # hashcat never sees the GPU (it runs on the baked-in PoCL CPU device
+    # instead). We only write it when it is missing, so a host whose toolkit
+    # *does* provide the ICD is left untouched — no duplicate device. `exec`
+    # keeps the worker as PID 1 so it still receives SIGTERM on `compose down`
+    # (the worker's shutdown path depends on that — see worker/main.py).
+    command:
+      - sh
+      - -c
+      - |
+        [ -e /etc/OpenCL/vendors/nvidia.icd ] || {
+          mkdir -p /etc/OpenCL/vendors
+          echo libnvidia-opencl.so.1 > /etc/OpenCL/vendors/nvidia.icd
+        }
+        exec python -m worker.main
     environment:
       - NARWAL_HASHCAT_FORCE=
       # Tells the container toolkit to expose the compute stack, OpenCL
