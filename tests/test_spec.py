@@ -294,3 +294,66 @@ def test_ordering_is_capped_by_the_permutation_limit(library):
     ]
     with pytest.raises(spec_mod.SpecError, match="every permutation"):
         spec_mod.validate(base_spec(kind="ordering", attacks=too_many))
+
+
+# ── suspect wordlists (contamination handling) ───────────────────────────────
+
+def test_suspect_wordlist_marks_matching_attack(library):
+    """An attack whose wordlist is listed in suspect_wordlists is flagged, and
+    one that is not stays clean."""
+    spec = base_spec(
+        suspect_wordlists=["rockyou.txt"],
+        attacks=[
+            {"label": "dict", "mode": "wordlist", "wordlist": "rockyou.txt"},
+            {"label": "clean", "mode": "wordlist", "wordlist": "sub/other.txt"},
+        ],
+    )
+    out = spec_mod.validate(spec)
+    by = {a.label: a for a in out.attacks}
+    assert by["dict"].suspect is True
+    assert by["clean"].suspect is False
+    assert [p.name for p in out.suspect_wordlists] == ["rockyou.txt"]
+
+
+def test_suspect_only_applies_to_straight_wordlist_attacks(library):
+    """A hybrid uses a dictionary too, but can never reproduce a bare goal word,
+    so it is never flagged suspect even if its wordlist is listed."""
+    spec = base_spec(
+        suspect_wordlists=["rockyou.txt"],
+        attacks=[
+            {"label": "hyb", "mode": "hybrid-wm", "wordlist": "rockyou.txt", "mask": "?d"},
+            {"label": "dict", "mode": "wordlist", "wordlist": "rockyou.txt"},
+        ],
+    )
+    out = spec_mod.validate(spec)
+    by = {a.label: a for a in out.attacks}
+    assert by["hyb"].suspect is False
+    assert by["dict"].suspect is True
+
+
+def test_suspect_wordlists_are_contained_like_any_corpus(library):
+    """The suspect list is a path input, so it gets the same containment check
+    as a wordlist — no reaching outside the library."""
+    with pytest.raises(spec_mod.SpecError):
+        spec_mod.validate(base_spec(suspect_wordlists=["../secret.txt"]))
+
+
+def test_suspect_wordlists_honour_the_regex_filter(library, monkeypatch):
+    monkeypatch.setattr(config, "wordlists_pattern", re.compile(r"\.txt$"))
+    # rockyou.txt matches, so this is fine
+    spec_mod.validate(base_spec(suspect_wordlists=["rockyou.txt"]))
+    # a name the filter excludes is rejected even though it exists
+    (config.wordlists_root / "notes.md").write_text("x\n")
+    with pytest.raises(spec_mod.SpecError):
+        spec_mod.validate(base_spec(suspect_wordlists=["notes.md"]))
+
+
+def test_suspect_wordlists_defaults_to_empty(library):
+    out = spec_mod.validate(base_spec())
+    assert out.suspect_wordlists == ()
+    assert all(a.suspect is False for a in out.attacks)
+
+
+def test_suspect_wordlists_must_be_a_list(library):
+    with pytest.raises(spec_mod.SpecError):
+        spec_mod.validate(base_spec(suspect_wordlists="rockyou.txt"))

@@ -76,6 +76,11 @@ class AttackRun:
     goal_loaded: int = 0        # unique digests hashcat actually loaded
     goal_rejected: int = 0      # lines it refused (over-length, malformed)
     partial: bool = False       # stopped early, so `recovered` is a lower bound
+    # Recovered plains that are only "cracked" because the goal word sat in the
+    # attack's dictionary verbatim, when that dictionary was flagged suspect (a
+    # subset of `recovered`). Set aside, not credited — see worker/main.py and
+    # backend/jobs/spec.py::Attack.suspect.
+    contaminated: set[bytes] = field(default_factory=set)
     # Wall clock for the whole hashcat invocation, goal-file loading included.
     # Shown alongside an ordering result, but not what it ranks by.
     duration_s: float = 0.0
@@ -91,7 +96,9 @@ class AttackRun:
         return self.exit_code in OK_EXITS or self.partial
 
 
-def build_argv(spec: JobSpec, attack: Attack, outfile: Path, session: str) -> list[str]:
+def build_argv(
+    spec: JobSpec, attack: Attack, outfile: Path, session: str, debug_file: Path | None = None
+) -> list[str]:
     """hashcat argv for one attack. Every element is a separate list entry and
     the process is spawned without a shell, so nothing here is ever re-parsed.
     """
@@ -134,6 +141,15 @@ def build_argv(spec: JobSpec, attack: Attack, outfile: Path, session: str) -> li
             argv += ["--increment-min", str(attack.increment_min)]
         if attack.increment_max is not None:
             argv += ["--increment-max", str(attack.increment_max)]
+    # For a suspect dictionary, ask hashcat to log the base word behind each
+    # crack (debug-mode 2 = Original-Word only, one line per crack in outfile
+    # order). The worker uses it to tell a verbatim dict hit (base == plain)
+    # from a genuine rule derivation (base != plain) — see run_attack and
+    # backend/jobs/spec.py::Attack.suspect. Only meaningful with rules; hashcat
+    # requires -r for debug-mode, which the caller guarantees before passing a
+    # debug_file.
+    if debug_file is not None:
+        argv += ["--debug-mode", "2", "--debug-file", str(debug_file)]
     argv += config.hashcat_extra
 
     # Positional arguments, in the order each attack mode expects. The goal
@@ -173,6 +189,53 @@ def read_recovered(outfile: Path) -> set[bytes]:
     return {line for line in data.split(b"\n") if line}
 
 
+def _read_lines_ordered(path: Path) -> list[bytes]:
+    """Lines of a hashcat-written file in order, no dedup. The outfile and the
+    debug file are both one line per crack in the same order, so reading each
+    this way lets them be zipped positionally. hashcat ends every line with
+    `\\n`; nothing here has internal blank lines (the goal and dict drop them),
+    so stripping the trailing newline leaves exactly one entry per crack."""
+    if not path.exists():
+        return []
+    data = path.read_bytes()
+    if not data:
+        return []
+    return data.rstrip(b"\n").split(b"\n")
+
+
+def _contaminated(
+    attack: Attack, recovered: set[bytes], outfile: Path, debug_file: Path, used_debug: bool
+) -> set[bytes]:
+    """The recovered plains to set aside as dictionary contamination.
+
+    Only for a suspect attack (its dictionary may be derived from the goal).
+    With rules, hashcat's debug file gives the base dict word per crack: a crack
+    is verbatim contamination when base == plain (the goal word was in the dict
+    unchanged) and a genuine derivation when base != plain (a rule produced it).
+    A plain reachable both ways is kept — hashcat emits a line per path, so the
+    derivation surfaces. Without rules every crack is verbatim by definition.
+    """
+    if not attack.suspect:
+        return set()
+    if not used_debug:
+        return set(recovered)
+
+    plains = _read_lines_ordered(outfile)
+    bases = _read_lines_ordered(debug_file)
+    if len(plains) != len(bases):
+        # Should not happen — both are written per crack. If it does, stay
+        # conservative: credit nothing from this suspect dictionary rather than
+        # risk crediting a verbatim leak.
+        log.warning(
+            "attack %s: debug file has %d lines but outfile has %d; treating all "
+            "recovered as verbatim contamination",
+            attack.label, len(bases), len(plains),
+        )
+        return set(recovered)
+    derived = {plain for plain, base in zip(plains, bases) if base != plain}
+    return set(recovered) - derived
+
+
 def run_attack(
     spec: JobSpec,
     attack: Attack,
@@ -190,11 +253,16 @@ def run_attack(
     """
     outfile = workdir / f"attack{index}.out"
     log_path = workdir / f"attack{index}.log"
+    debug_file = workdir / f"attack{index}.debug"
     # A requeued job re-runs from scratch; stale artifacts would otherwise be
     # read back as this run's results.
     outfile.unlink(missing_ok=True)
+    debug_file.unlink(missing_ok=True)
 
-    argv = build_argv(spec, attack, outfile, session)
+    # The base-word log only makes sense for a suspect dictionary run through
+    # rules; hashcat refuses --debug-mode without -r.
+    used_debug = attack.suspect and bool(attack.rules)
+    argv = build_argv(spec, attack, outfile, session, debug_file if used_debug else None)
     log.info("attack %s: %s", attack.label, " ".join(argv))
 
     # Monotonic, not wall clock: a duration is what the ordering analysis
@@ -281,11 +349,13 @@ def run_attack(
     if not goal_loaded and latest and latest.get("goal_size"):
         goal_loaded = latest["goal_size"]
 
+    recovered = read_recovered(outfile)
     return AttackRun(
         label=attack.label,
         argv=argv,
         exit_code=exit_code,
-        recovered=read_recovered(outfile),
+        recovered=recovered,
+        contaminated=_contaminated(attack, recovered, outfile, debug_file, used_debug),
         goal_loaded=goal_loaded,
         goal_rejected=goal_rejected,
         partial=partial,

@@ -182,7 +182,11 @@ def run_job(conn, job: dict) -> FinalJobResult:
 
     started = time.time()
     runs, warmup = _run_attacks(conn, job_id, spec)
-    recovered = {r.label: r.recovered for r in runs}
+    # The honest recovered set: a goal word that was only "cracked" because it
+    # sat verbatim in a suspect dictionary is set aside, so it is credited
+    # nowhere downstream (coverage, union, ordering score, pair samples). What
+    # a rule genuinely derived stays in. See worker/hashcat.py::_contaminated.
+    recovered = {r.label: r.recovered - r.contaminated for r in runs}
 
     # Every attack read the same goal file, so these should agree; take the
     # max so a run that exited before printing its summary cannot shrink the
@@ -224,6 +228,9 @@ def finalize(
             wordlist=attack.wordlist.name if attack.wordlist else None,
             rules=[r.name for r in attack.rules],
             mask=attack.mask,
+            suspect=attack.suspect,
+            # Verbatim goal hits set aside for this attack (0 unless suspect).
+            contaminated=len(run.contaminated),
         )
 
     # What each side of a pair uniquely contributes — the concrete answer to
@@ -241,6 +248,10 @@ def finalize(
         goal=str(spec.goal.relative_to(config.wordlists_root)),
         goal_rejected=goal_rejected,
         partial=partial,
+        # Goal words set aside across all attacks as verbatim dictionary
+        # contamination, and the wordlists that triggered it — for the UI note.
+        contaminated_total=sum(len(r.contaminated) for r in runs),
+        suspect_wordlists=[p.name for p in spec.suspect_wordlists],
         # Seconds spent compiling kernels before the clock started, per attack
         # mode. Zero-ish means the cache was already warm. Recorded so a
         # surprising set of durations can be checked against it.

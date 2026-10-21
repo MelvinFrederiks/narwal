@@ -135,6 +135,11 @@ class FinalAttackResult(AttackResult):
     wordlist: str | None
     rules: list[str]
     mask: str | None
+    # Set in worker/main.py::finalize. `suspect` = this attack's wordlist was
+    # flagged as possibly derived from the goal; `contaminated` = how many
+    # verbatim goal hits were set aside (0 unless suspect).
+    suspect: bool
+    contaminated: int
 
 
 class FinalJobResult(JobResultBase[FinalAttackResult]):
@@ -149,6 +154,10 @@ class FinalJobResult(JobResultBase[FinalAttackResult]):
     finished_at: float
     duration_s: float
     partial_note: NotRequired[str]
+    # Goal words set aside across all attacks as verbatim dictionary
+    # contamination, and the suspect wordlists that triggered it.
+    contaminated_total: int
+    suspect_wordlists: list[str]
     # Ordering specific
     cost_axis: NotRequired[str]
     total_guesses: NotRequired[int | None]

@@ -61,7 +61,7 @@ export function attackBuilder({
   submitLabel = "Queue analysis", onSubmit,
 }) {
   const state = {
-    name: "", goal: "", maxRuntime: "",
+    name: "", goal: "", maxRuntime: "", suspect: "",
     attacks, submitting: false, error: "",
   };
   const id = (suffix) => `${prefix}-${suffix}`;
@@ -79,6 +79,15 @@ export function attackBuilder({
         <label for="${id("goal")}" style="font-size:13px;color:var(--text-secondary)">Goal wordlist</label>
         <input type="text" id="${id("goal")}" list="${id("files")}"
                placeholder="the passwords you are trying to recover" value="${esc(state.goal)}"/>
+        <label for="${id("suspect")}" style="font-size:13px;color:var(--text-secondary)">Suspect lists</label>
+        <span style="display:flex;gap:8px;align-items:center">
+          <input type="text" id="${id("suspect")}" list="${id("files")}" style="flex:1;min-width:200px"
+                 placeholder="optional — wordlists that may be built from the goal (comma-separated)"
+                 value="${esc(state.suspect)}"/>
+          <span class="sub" style="margin:0;font-size:12px">
+            a verbatim goal word found in one of these is set aside, not counted; rule-derived cracks still count.
+          </span>
+        </span>
         <label for="${id("runtime")}" style="font-size:13px;color:var(--text-secondary)">Time cap</label>
         <span style="display:flex;gap:8px;align-items:center">
           <input type="number" id="${id("runtime")}" min="1" max="86400" style="width:120px"
@@ -164,11 +173,12 @@ export function attackBuilder({
   function readTop() {
     state.name = q("name").value;
     state.goal = q("goal").value;
+    state.suspect = q("suspect").value;
     state.maxRuntime = q("runtime").value;
   }
 
   function wire() {
-    for (const suffix of ["name", "goal", "runtime"]) {
+    for (const suffix of ["name", "goal", "suspect", "runtime"]) {
       q(suffix).addEventListener("input", readTop);
     }
 
@@ -241,6 +251,7 @@ export function attackBuilder({
         name: state.name.trim(),
         goal: state.goal.trim(),
         maxRuntime: state.maxRuntime.trim(),
+        suspect: state.suspect.split(",").map((s) => s.trim()).filter(Boolean),
         attacks: state.attacks,
       });
       return; // a successful submit navigates away; leave the form disabled

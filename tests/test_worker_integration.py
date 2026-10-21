@@ -404,3 +404,56 @@ def test_outfile_check_dir_does_not_leak_between_attacks(env):
     assert by_label["sixlower"]["recovered"] == 2
     assert job["result"]["pairs"][0]["shared"] == 1
     conn.close()
+
+
+def test_suspect_wordlist_sets_aside_verbatim_but_keeps_derivations(env):
+    """A dictionary flagged suspect: a goal word sitting in it verbatim is set
+    aside, while a goal word a rule *derived* from a (non-goal) base is kept.
+
+    `sdict` holds `password12`, `hello`, `secret`. Against goal `{password123,
+    hello!, secret, zzzzzz}` with rules identity/`$3`/`$!`:
+      - password123 ← password12 + $3   (derived, base != plain)  → kept
+      - hello!       ← hello + $!        (derived)                 → kept
+      - secret       ← secret + identity (verbatim, base == plain) → set aside
+    """
+    from worker import main as worker_main
+
+    library = config.wordlists_root
+    (library / "goal2.txt").write_text("password123\nhello!\nsecret\nzzzzzz\n")
+    (library / "sdict.txt").write_text("password12\nhello\nsecret\n")
+    (library / "zcl.txt").write_text("zzzzzz\n")
+    (library / "derive.rule").write_text(":\n$3\n$!\n")
+
+    conn = db.connect()
+    db.init(conn)
+    job_id = db.enqueue(conn, {
+        "kind": "ordering",
+        "goal": "goal2.txt",
+        "suspect_wordlists": ["sdict.txt"],
+        "attacks": [
+            {"label": "sus", "mode": "wordlist", "wordlist": "sdict.txt", "rules": ["derive.rule"]},
+            {"label": "clean", "mode": "wordlist", "wordlist": "zcl.txt"},
+        ],
+    }, name="contamination")
+
+    assert worker_main.process_one(conn) is True
+    job = db.get(conn, job_id)
+    assert job["status"] == "done", job["error"]
+    r = job["result"]
+
+    by = {a["label"]: a for a in r["attacks"]}
+    # The suspect attack: secret set aside, the two derivations kept.
+    assert by["sus"]["suspect"] is True
+    assert by["sus"]["contaminated"] == 1
+    assert by["sus"]["recovered"] == 2        # password123, hello! — secret excluded
+    # The clean attack is untouched.
+    assert by["clean"]["suspect"] is False
+    assert by["clean"]["contaminated"] == 0
+    assert by["clean"]["recovered"] == 1      # zzzzzz
+
+    assert r["contaminated_total"] == 1
+    assert r["suspect_wordlists"] == ["sdict.txt"]
+    # secret is credited to nobody, so the combined haul is 3 of 4, not 4.
+    assert r["combined_recovered"] == 3
+    assert r["goal_size"] == 4
+    conn.close()

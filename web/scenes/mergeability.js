@@ -122,9 +122,10 @@ export async function render(mount, route = "") {
   if (jobId) renderResult(jobId);
   poll();
 
-  async function submit({ name: jobName, goal, maxRuntime, attacks }) {
+  async function submit({ name: jobName, goal, maxRuntime, suspect, attacks }) {
     const spec = { kind: "mergeability", goal, attacks: attacksToSpec(attacks) };
     if (maxRuntime) spec.max_runtime_s = Number(maxRuntime);
+    if (suspect?.length) spec.suspect_wordlists = suspect;
 
     const res = await fetch("/api/jobs", {
       method: "POST",
@@ -180,6 +181,12 @@ export async function render(mount, route = "") {
           hashcat rejected ${num(r.goal_rejected)} line(s) of the goal file — over its 256-character
           limit, or otherwise unparseable. Coverage below is measured against the
           ${num(r.goal_size)} that did load.
+        </div>` : ""}
+        ${(r.suspect_wordlists?.length || r.contaminated_total) ? `<div class="card info" style="margin-top:8px">
+          <b>${num(r.contaminated_total || 0)}</b> recovered password${(r.contaminated_total === 1) ? " was" : "s were"}
+          set aside as dictionary contamination — goal words found verbatim in a suspect wordlist
+          (${(r.suspect_wordlists || []).map((w) => `<code>${esc(w)}</code>`).join(", ") || "none"}). Rule-derived
+          cracks are still counted. All indices below are on the cleaned sets.
         </div>` : ""}
 
         <div class="card success" style="margin-top:12px">

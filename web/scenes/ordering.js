@@ -136,9 +136,10 @@ export async function render(mount, route = "") {
   if (jobId) renderResult(jobId);
   poll();
 
-  async function submit({ name: jobName, goal, maxRuntime, attacks }) {
+  async function submit({ name: jobName, goal, maxRuntime, suspect, attacks }) {
     const spec = { kind: "ordering", goal, attacks: attacksToSpec(attacks) };
     if (maxRuntime) spec.max_runtime_s = Number(maxRuntime);
+    if (suspect?.length) spec.suspect_wordlists = suspect;
 
     const res = await fetch("/api/jobs", {
       method: "POST",
@@ -215,6 +216,14 @@ export async function render(mount, route = "") {
           hashcat rejected ${num(r.goal_rejected)} line(s) of the goal file — over its 256-character
           limit, or otherwise unparseable. Coverage is measured against the ${num(r.goal_size)}
           that did load.
+        </div>` : ""}
+
+        ${(r.suspect_wordlists?.length || r.contaminated_total) ? `<div class="card info" style="margin-top:8px">
+          <b>${num(r.contaminated_total || 0)}</b> recovered password${(r.contaminated_total === 1) ? " was" : "s were"}
+          set aside as dictionary contamination — goal words found sitting verbatim in a suspect wordlist
+          (${(r.suspect_wordlists || []).map((w) => `<code>${esc(w)}</code>`).join(", ") || "none"}), so they
+          are not counted anywhere below. Cracks a rule <i>derived</i> are still counted, even when the
+          derived form also happens to be in the list.
         </div>` : ""}
 
         ${headlineHtml(r, best, worst, saved)}
@@ -437,8 +446,12 @@ export async function render(mount, route = "") {
             · <b>${pct(a.coverage, 1)}%</b>
           </span>
         </div>
-        <div style="height:6px;background:var(--surface-3);border-radius:3px;overflow:hidden;margin-top:4px">
-          <div style="height:100%;width:${(a.coverage * 100).toFixed(1)}%;background:${CURVES[0].color}"></div>
+        <div style="display:flex;height:6px;background:var(--surface-3);border-radius:3px;overflow:hidden;margin-top:4px">
+          <div title="${num(a.recovered)} true cracks"
+               style="width:${(a.coverage * 100).toFixed(1)}%;background:${CURVES[0].color}"></div>
+          ${a.suspect && a.contaminated && r.goal_size ? `
+          <div title="${num(a.contaminated)} set aside as contamination"
+               style="width:${((a.contaminated / r.goal_size) * 100).toFixed(1)}%;background:var(--warning-border)"></div>` : ""}
         </div>
         <div class="sub" style="margin:4px 0 0;font-size:11px">
           ${C.guesses
@@ -446,6 +459,7 @@ export async function render(mount, route = "") {
             : (a.rate_per_s != null ? `recovers ${rate(a.rate_per_s)} on its own` : "runtime not recorded")}
           · <b>${num(a.exclusive)}</b> password${a.exclusive === 1 ? "" : "s"} only this attack finds
           ${a.exclusive === 0 ? " — everything it recovers, something else recovers too" : ""}
+          ${a.suspect ? ` · <b>${num(a.contaminated || 0)}</b> set aside as contamination` : ""}
         </div>
       </div>`;
   }

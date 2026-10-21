@@ -85,6 +85,12 @@ class Attack:
     charsets: tuple[tuple[str, str], ...] = ()
     increment_min: int | None = None
     increment_max: int | None = None
+    # This attack's wordlist is flagged as possibly derived from the goal list,
+    # so verbatim cracks (the goal word was sitting in the dictionary) are set
+    # aside rather than credited. Only ever true for mode "wordlist" — see
+    # validate() and worker/hashcat.py. The measurement of what an attack
+    # really *guesses* depends on this being honest.
+    suspect: bool = False
 
 
 @dataclass(frozen=True)
@@ -93,6 +99,9 @@ class JobSpec:
     attacks: tuple[Attack, ...] = ()
     max_runtime_s: int | None = None
     kind: str = DEFAULT_KIND
+    # Wordlists the caller marked as possibly built from the goal corpus. An
+    # attack whose wordlist resolves to one of these is marked `suspect`.
+    suspect_wordlists: tuple[Path, ...] = ()
 
 
 # ── path resolution ─────────────────────────────────────────────────────────
@@ -223,7 +232,7 @@ def _validate_increment(raw: dict) -> tuple[int | None, int | None]:
     return lo, hi
 
 
-def _validate_attack(raw: object, index: int) -> Attack:
+def _validate_attack(raw: object, index: int, suspect_set: frozenset[Path] = frozenset()) -> Attack:
     if not isinstance(raw, dict):
         raise SpecError(f"attack {index + 1} must be an object")
     mode = raw.get("mode")
@@ -254,6 +263,12 @@ def _validate_attack(raw: object, index: int) -> Attack:
 
     lo, hi = _validate_increment(raw) if mode == "mask" else (None, None)
 
+    # Contamination handling is only well-defined for a straight dictionary
+    # attack, where a crack is either the dict word verbatim or a rule applied
+    # to it. A hybrid combines the word with a mask, so it can never reproduce a
+    # bare goal word anyway — nothing to set aside.
+    suspect = mode == "wordlist" and wordlist is not None and wordlist in suspect_set
+
     return Attack(
         label=label,
         mode=mode,
@@ -264,6 +279,7 @@ def _validate_attack(raw: object, index: int) -> Attack:
         charsets=charsets,
         increment_min=lo,
         increment_max=hi,
+        suspect=suspect,
     )
 
 
@@ -277,6 +293,15 @@ def validate(raw: object) -> JobSpec:
         raise SpecError(f"kind must be one of {', '.join(KINDS)}")
 
     goal = _resolve_corpus(raw.get("goal"), "goal wordlist")
+
+    # Wordlists the caller believes may be derived from the goal. Resolved
+    # through the same containment + regex gate as any corpus, so this field is
+    # no weaker a trust boundary than `wordlist` itself.
+    suspect_raw = raw.get("suspect_wordlists") or []
+    if not isinstance(suspect_raw, list):
+        raise SpecError("suspect_wordlists must be a list of wordlist paths")
+    suspect_paths = tuple(_resolve_corpus(s, "suspect wordlist") for s in suspect_raw)
+    suspect_set = frozenset(suspect_paths)
 
     attacks_raw = raw.get("attacks")
     if not isinstance(attacks_raw, list):
@@ -296,7 +321,7 @@ def validate(raw: object) -> JobSpec:
             )
         raise SpecError(f"at most {limit} attacks per job")
 
-    attacks = tuple(_validate_attack(a, i) for i, a in enumerate(attacks_raw))
+    attacks = tuple(_validate_attack(a, i, suspect_set) for i, a in enumerate(attacks_raw))
 
     labels = [a.label for a in attacks]
     if len(set(labels)) != len(labels):
@@ -307,4 +332,10 @@ def validate(raw: object) -> JobSpec:
         if not isinstance(runtime, int) or isinstance(runtime, bool) or not 1 <= runtime <= 86_400:
             raise SpecError("max_runtime_s must be an integer between 1 and 86400")
 
-    return JobSpec(goal=goal, attacks=attacks, max_runtime_s=runtime, kind=kind)
+    return JobSpec(
+        goal=goal,
+        attacks=attacks,
+        max_runtime_s=runtime,
+        kind=kind,
+        suspect_wordlists=suspect_paths,
+    )
