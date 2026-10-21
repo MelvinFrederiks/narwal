@@ -24,8 +24,11 @@ mergeability measurement already relies on: `--potfile-disable` means every
 attack is run against the *full* goal list and never sees what another attack
 cracked (see worker/hashcat.py). So the worker runs each attack exactly once,
 and every permutation's cracked-over-guesses curve is then a pure function of
-the N recovered sets and the N guess counts. All N! orderings get scored
-here, exhaustively and exactly, in milliseconds.
+the N recovered sets and the N guess counts. Up to EXACT_ENUM_MAX attacks all
+N! orderings get scored here, exhaustively and exactly, in milliseconds. Above
+that, N! is infeasible — ordering is min-sum set cover, which is NP-hard — so a
+fixed-width beam search (`beam_search`) finds a near-optimal order in O(width·N²)
+and the result is flagged `approximate`. See `beam_search` and `summarise`.
 
 ## How all N! orderings get scored without touching the sets N! times
 
@@ -82,6 +85,7 @@ hashcat installed.
 from __future__ import annotations
 
 import heapq
+import random
 from itertools import permutations
 
 from backend.jobs.result import (
@@ -95,10 +99,16 @@ from backend.jobs.result import (
     OrderingStep,
 )
 
-# 8! = 40,320 orderings is instant; 10! = 3.6M starts to be felt, and 12!
-# never finishes. Exhaustive enumeration is the feature, so the cap is real
-# rather than a quiet fallback to a heuristic.
-MAX_ORDER_ATTACKS = 8
+# Up to EXACT_ENUM_MAX attacks every permutation is scored exactly (10! = 3.6M
+# is ~1s; 12! never finishes). Above it, a fixed-width beam search finds a
+# near-optimal ordering in O(width·N^2) — ordering is min-sum set cover, which
+# is NP-hard, so exact enumeration was never going to scale and a beam (which
+# generalises the greedy heuristic) is the principled way up. MAX_ORDER_ATTACKS
+# is the beam's ceiling; the 2^N union table is only 65,536 entries at 16.
+MAX_ORDER_ATTACKS = 16
+EXACT_ENUM_MAX = 10
+BEAM_WIDTH = 1000       # partial orderings kept per depth above EXACT_ENUM_MAX
+SAMPLE_SIZE = 50_000    # random orderings scored for the spread when approximate
 
 # Fractions of the *achievable* total (not of the goal list) that the milestone
 # table reports points for. 1.0 is "everything these attacks will ever find".
@@ -289,17 +299,26 @@ def describe(
     )
 
 
-def greedy_order(n: int, table: list[int], cost: list[float]) -> tuple[int, ...]:
+def greedy_order(
+    n: int, table: list[int], cost: list[float], first: int | None = None
+) -> tuple[int, ...]:
     """Take whichever attack adds the most new passwords per guess, repeat.
 
     The obvious heuristic, computed so the result can say whether exhaustive
     search actually bought anything. Ties break on absolute gain, then on the
-    attack's own position, so the answer is deterministic.
+    attack's own position, so the answer is deterministic. `first` forces the
+    opening attack (used to fill the per-opener "what to run first" table when
+    the full set of orderings is not enumerated).
     """
     chosen: list[int] = []
     remaining = list(range(n))
     mask = 0
     prev = 0
+    if first is not None:
+        chosen.append(first)
+        remaining.remove(first)
+        mask = 1 << first
+        prev = table[mask]
     while remaining:
         best_key = None
         best_i = remaining[0]
@@ -317,6 +336,63 @@ def greedy_order(n: int, table: list[int], cost: list[float]) -> tuple[int, ...]
         mask |= 1 << best_i
         prev = best_cur
     return tuple(chosen)
+
+
+def beam_search(n: int, table: list[int], cost: list[float], width: int) -> tuple[int, ...]:
+    """Near-optimal ordering without enumerating all N!.
+
+    Keeps the `width` best partial sequences at each depth (greedy is width 1,
+    full enumeration is unbounded width). Because the future of a partial
+    depends only on *which* attacks are already chosen — not their order — nodes
+    are deduplicated by their chosen-set bitmask, keeping the lowest-latency path
+    to each set, so the beam explores distinct subsets rather than reshuffles of
+    the same one.
+
+    Ranking minimises an optimistic min-sum-latency completion:
+
+        key = latency_so_far + (total − covered) · cost_spent
+
+    `latency` is Σ gain·(cost spent before the step + the step's cost / 2), the
+    same uniform-accrual model `describe` integrates; at full depth the second
+    term is zero and the key equals `total·total_cost − auc`, so minimising it
+    maximises the area. The second term penalises a partial that has burned cost
+    without covering much — the trap a raw partial-area ranking would fall into.
+    """
+    full = (1 << n) - 1
+    total = table[full]
+
+    def key(latency: float, cov: int, spent: float) -> float:
+        return latency + (total - cov) * spent
+
+    # node: (mask, cov, spent, latency, order)
+    beam: list[tuple[int, int, float, float, tuple[int, ...]]] = []
+    for i in range(n):
+        mask = 1 << i
+        cov = table[mask]
+        latency = cov * (cost[i] * 0.5)
+        beam.append((mask, cov, cost[i], latency, (i,)))
+    beam.sort(key=lambda nd: key(nd[3], nd[1], nd[2]))
+    beam = beam[:width]
+
+    for _ in range(1, n):
+        # Best (lowest-latency) path to each reachable chosen-set.
+        best_by_mask: dict[int, tuple[int, int, float, float, tuple[int, ...]]] = {}
+        for mask, cov, spent, latency, order in beam:
+            for j in range(n):
+                bit = 1 << j
+                if mask & bit:
+                    continue
+                nmask = mask | bit
+                ncov = table[nmask]
+                nlat = latency + (ncov - cov) * (spent + cost[j] * 0.5)
+                prev = best_by_mask.get(nmask)
+                if prev is None or nlat < prev[3]:
+                    best_by_mask[nmask] = (nmask, ncov, spent + cost[j], nlat, order + (j,))
+        beam = sorted(best_by_mask.values(), key=lambda nd: key(nd[3], nd[1], nd[2]))[:width]
+
+    # Full-set nodes now; lowest key (== highest auc) wins.
+    best = min(beam, key=lambda nd: key(nd[3], nd[1], nd[2]))
+    return best[4]
 
 
 # ── the whole analysis ──────────────────────────────────────────────────────
@@ -370,8 +446,7 @@ def summarise(
         raise OrderingError("an ordering analysis needs at least 2 attacks")
     if n > MAX_ORDER_ATTACKS:
         raise OrderingError(
-            f"ordering analysis enumerates every permutation, so it is capped at "
-            f"{MAX_ORDER_ATTACKS} attacks ({n} given)"
+            f"ordering analysis is capped at {MAX_ORDER_ATTACKS} attacks ({n} given)"
         )
 
     counts = signature_counts(recovered, labels)
@@ -380,7 +455,30 @@ def summarise(
     axis, cost, guess_list, dur_list = _cost_axis(labels, guesses, durations)
     norm = total * sum(cost)
 
-    # One pass over every permutation. Only the scalar score is kept per
+    greedy = greedy_order(n, table, cost)
+
+    # Above EXACT_ENUM_MAX, scoring every one of the N! orderings is infeasible,
+    # so beam search finds `best` and the reported spread (distribution, worst,
+    # the per-opener table) comes from a random sample plus the beam's own best
+    # and a greedy completion of each opener. Below it, the candidate set *is*
+    # every permutation and the numbers are exact.
+    approximate = n > EXACT_ENUM_MAX
+    if approximate:
+        beam_best = beam_search(n, table, cost, BEAM_WIDTH)
+        rng = random.Random(0)  # deterministic: a re-run must score identically
+        base = list(range(n))
+        candidates: set[tuple[int, ...]] = set()
+        for _ in range(SAMPLE_SIZE):
+            rng.shuffle(base)
+            candidates.add(tuple(base))
+        candidates.add(beam_best)
+        candidates.add(greedy)
+        candidates.update(greedy_order(n, table, cost, first=i) for i in range(n))
+        candidate_iter: object = candidates
+    else:
+        candidate_iter = permutations(range(n))
+
+    # One pass over the candidate orderings. Only the scalar score is kept per
     # ordering; the full description is rebuilt afterwards for the handful of
     # orderings that are actually reported.
     top: list[tuple[float, tuple[int, ...]]] = []  # min-heap, size TOP_K
@@ -388,7 +486,7 @@ def summarise(
     worst = (float("inf"), None)
     best_from: list[tuple[float, tuple[int, ...]] | None] = [None] * n
 
-    for order in permutations(range(n)):
+    for order in candidate_iter:  # type: ignore[attr-defined]
         eff = _auc(order, table, cost) / norm if norm else 0.0
         effs.append(eff)
 
@@ -406,7 +504,6 @@ def summarise(
 
     ranked = sorted(top, key=lambda p: (-p[0], p[1]))
     best_order = ranked[0][1]
-    greedy = greedy_order(n, table, cost)
 
     def detail(o: tuple[int, ...]) -> OrderingSingleRun:
         return describe(o, labels, table, cost, total, goal_size, guess_list, dur_list)
@@ -455,7 +552,12 @@ def summarise(
         cost_axis=axis,
         total_guesses=sum(guess_list) if guess_list else None,
         total_runtime_s=sum(dur_list) if dur_list else None,
+        # Exact: N!. Approximate: the beam + sampled orderings actually scored.
         permutations_scored=len(effs),
+        # True when `best` is from beam search and the spread is sampled rather
+        # than exhaustive — the UI labels the result accordingly.
+        approximate=approximate,
+        beam_width=BEAM_WIDTH if approximate else None,
         timing_available=dur_list is not None,
         milestone_fractions=list(MILESTONES),
         best=best,

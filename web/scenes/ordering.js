@@ -13,8 +13,9 @@
 // where the attack sits in the sequence (`--potfile-disable` means every attack
 // is run against the full goal list and never sees another's results). So the
 // worker runs each attack **once** — exactly as a mergeability job does — and
-// backend/jobs/ordering.py then scores all N! permutations exactly, in
-// milliseconds. 8 attacks is 40,320 sequences off 8 hashcat runs.
+// backend/jobs/ordering.py then scores all N! permutations exactly (up to 10
+// attacks), or beam-searches for a near-optimal order above that, in
+// milliseconds either way.
 //
 // The headline number is `efficiency`: the area under the cracked-vs-guesses
 // curve normalised by (total recovered × total guesses), so 1 would be
@@ -125,8 +126,8 @@ export async function render(mount, route = "") {
       ],
       maxAttacks,
       colors: CURVES.map((c) => c.color),
-      hint: `Up to ${maxAttacks} attacks — every one of the ${factorialText(maxAttacks)} possible
-             sequences gets scored.`,
+      hint: `Up to ${maxAttacks} attacks — every ordering scored exactly up to 10 attacks,
+             by beam search above that.`,
       submitLabel: "Queue ordering analysis",
       onSubmit: submit,
     }).render();
@@ -195,7 +196,9 @@ export async function render(mount, route = "") {
         <h2>${esc(job.name || "Analysis")}</h2>
         <div class="sub">
           Goal <code>${esc(r.goal)}</code> — ${num(r.goal_size)} distinct passwords.
-          ${num(r.permutations_scored)} sequences scored from ${r.attacks.length} hashcat runs
+          ${r.approximate
+            ? `best found by beam search (width ${num(r.beam_width)}), with ${num(r.permutations_scored)} orderings sampled,`
+            : `${num(r.permutations_scored)} sequences scored`} from ${r.attacks.length} hashcat runs
           ${C.guesses ? `totalling ${guessFmt(r.total_guesses)} guesses` : `totalling ${duration(r.total_runtime_s)}`}${
             C.guesses && r.total_runtime_s != null ? ` (${duration(r.total_runtime_s)})` : ""
           }, on hashcat ${esc(r.hashcat_version || "?")}.
@@ -261,7 +264,7 @@ export async function render(mount, route = "") {
             <div style="font-weight:500;margin-bottom:8px">
               Does the order matter?
               <span class="sub" style="font-weight:400;font-size:11px">
-                (all ${num(r.permutations_scored)} sequences by score)
+                (${r.approximate ? `${num(r.permutations_scored)} sampled` : `all ${num(r.permutations_scored)}`} sequences by score)
               </span>
             </div>
             ${distributionHtml(r)}
@@ -294,8 +297,16 @@ export async function render(mount, route = "") {
           <b>Greedy</b> is the obvious heuristic (always run whichever attack adds the most new
           passwords per ${C.guesses ? "guess" : "second"} next); it is shown because it is not always
           right — an attack can look productive until the attack that would have duplicated it has
-          been taken out of the pool, which is why every permutation is scored instead.
+          been taken out of the pool, which is why ${r.approximate
+            ? "a wide beam of orderings is searched rather than trusting greedy"
+            : "every permutation is scored instead"}.
         </div>
+        ${r.approximate ? `<div class="sub" style="margin-top:8px">
+          With more than 10 attacks there are too many orderings to score them all (ordering is an
+          NP-hard problem), so <b>beam search</b> keeps the best ${num(r.beam_width)} partial sequences
+          at each step to find a near-optimal order, and the spread above is from a random sample. The
+          recommended order is "best found", not provably optimal.
+        </div>` : ""}
         <div class="sub" style="margin-top:10px">
           Wondering whether an attack earns its place at all? <a href="#mergeability">Mergeability</a>
           measures what each one adds on top of each other one.
@@ -316,7 +327,9 @@ export async function render(mount, route = "") {
     return `
       <div class="card success" style="margin-top:12px">
         <div style="margin-bottom:8px">
-          Run them in this order — best of ${num(r.permutations_scored)}, score
+          Run them in this order — ${r.approximate
+            ? `best found by beam search`
+            : `best of ${num(r.permutations_scored)}`}, score
           <b>${pct(best.efficiency, 1)}%</b>:
         </div>
         <div style="line-height:2">${seq(best)}</div>
@@ -337,11 +350,12 @@ export async function render(mount, route = "") {
       <div class="card ${greedy.is_optimal ? "info" : "warning"}" style="margin-top:8px;font-size:13px">
         ${greedy.is_optimal
           ? `Picking greedily — always the best new-passwords-per-${C.guesses ? "guess" : "second"}
-             next — happens to land on an optimal sequence here. Enumerating every permutation is
-             what establishes that.`
+             next — lands on ${r.approximate ? "the same sequence beam search found" : "an optimal sequence here"}.
+             ${r.approximate ? "Beam search explores many more orderings and found nothing better."
+               : "Enumerating every permutation is what establishes that."}`
           : `Picking greedily would have given <span style="line-height:2">${seq(greedy)}</span>
              at ${pct(greedy.efficiency, 1)}%, which ${num(greedy.beaten_by)}
-             sequence${greedy.beaten_by === 1 ? "" : "s"} beat.`}
+             ${r.approximate ? "sampled " : ""}sequence${greedy.beaten_by === 1 ? "" : "s"} beat.`}
       </div>`;
   }
 
@@ -720,10 +734,4 @@ function costCtx(r) {
     rateCol: guesses ? "New / guess" : "New rate",
     xTitle: guesses ? "guesses" : "elapsed",
   };
-}
-
-function factorialText(n) {
-  let f = 1;
-  for (let i = 2; i <= n; i++) f *= i;
-  return f.toLocaleString();
 }

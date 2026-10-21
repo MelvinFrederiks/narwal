@@ -312,12 +312,12 @@ def validate(raw: object) -> JobSpec:
             if kind == "ordering"
             else "a mergeability job needs at least 2 attacks to compare"
         )
-    limit = min(MAX_ATTACKS, MAX_ORDER_ATTACKS) if kind == "ordering" else MAX_ATTACKS
+    limit = MAX_ORDER_ATTACKS if kind == "ordering" else MAX_ATTACKS
     if len(attacks_raw) > limit:
-        if kind == "ordering" and limit == MAX_ORDER_ATTACKS:
+        if kind == "ordering":
             raise SpecError(
-                f"an ordering job scores every permutation of its attacks, so it is "
-                f"capped at {limit} ({len(attacks_raw)} given)"
+                f"an ordering job sequences its attacks, so it is capped at "
+                f"{limit} ({len(attacks_raw)} given)"
             )
         raise SpecError(f"at most {limit} attacks per job")
 

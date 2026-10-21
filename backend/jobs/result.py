@@ -117,6 +117,10 @@ class OrderingResult(JobResultBase[OrderingAttackResult]):
     total_guesses: int | None
     total_runtime_s: float | None
     permutations_scored: int
+    # Above the exact-enumeration cap `best` comes from beam search and the
+    # spread is sampled; `approximate` says so and `beam_width` is the beam size.
+    approximate: bool
+    beam_width: int | None
     timing_available: bool
     milestone_fractions: list[float]
     best: OrderingSingleRun
@@ -163,6 +167,8 @@ class FinalJobResult(JobResultBase[FinalAttackResult]):
     total_guesses: NotRequired[int | None]
     total_runtime_s: NotRequired[float | None]
     permutations_scored: NotRequired[int]
+    approximate: NotRequired[bool]
+    beam_width: NotRequired[int | None]
     timing_available: NotRequired[bool]
     milestone_fractions: NotRequired[list[float]]
     best: NotRequired[OrderingSingleRun]

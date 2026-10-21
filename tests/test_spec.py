@@ -292,7 +292,7 @@ def test_ordering_is_capped_by_the_permutation_limit(library):
         {"label": f"a{i}", "mode": "mask", "mask": "?d"}
         for i in range(MAX_ORDER_ATTACKS + 1)
     ]
-    with pytest.raises(spec_mod.SpecError, match="every permutation"):
+    with pytest.raises(spec_mod.SpecError, match="capped at"):
         spec_mod.validate(base_spec(kind="ordering", attacks=too_many))
 
 

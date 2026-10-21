@@ -309,18 +309,76 @@ def test_too_few_or_too_many_attacks_are_refused():
         ordering.summarise(many, len(many), guesses={k: 1 for k in many})
 
 
-def test_the_maximum_size_is_actually_enumerable():
-    """8 attacks is 40,320 orderings — the cap exists because this has to stay
-    fast, so it is worth running once."""
-    n = ordering.MAX_ORDER_ATTACKS
+def test_the_largest_exact_size_is_actually_enumerable():
+    """EXACT_ENUM_MAX! orderings scored exactly — the ceiling on exhaustive
+    enumeration, worth running once to prove it stays fast."""
+    n = ordering.EXACT_ENUM_MAX
     recovered = {f"a{i}": b(*[f"p{i}-{j}" for j in range(50)]) for i in range(n)}
     dur = {f"a{i}": float(i + 1) for i in range(n)}
     r = ordering.summarise(recovered, n * 50, guesses=dur)
 
     import math
+    assert r["approximate"] is False
     assert r["permutations_scored"] == math.factorial(n)
     # All disjoint and equal size, so cheapest-first is the only right answer.
     assert r["best"]["order"] == [f"a{i}" for i in range(n)]
+
+
+# ── beam search above the exact-enumeration cap ──────────────────────────────
+
+def test_beam_matches_the_exact_optimum_on_a_small_instance():
+    """With a wide beam the heuristic must recover the true optimum. Checked on
+    a size the exact path can also solve, for a ground truth."""
+    recovered = {
+        "a": b("p1", "p2", "p5"),
+        "b": b("p2", "p3"),
+        "c": b("p3", "p4", "p5", "p6"),
+        "d": b("p7"),
+        "e": b("p1", "p8"),
+    }
+    cost = [4.0, 1.0, 7.0, 2.0, 3.0]
+    labels = list(recovered)
+    counts = ordering.signature_counts(recovered, labels)
+    table, _ = ordering.union_table(len(labels), counts)
+
+    exact = max(permutations(range(len(labels))),
+                key=lambda o: ordering._auc(o, table, cost))
+    beam = ordering.beam_search(len(labels), table, cost, width=1000)
+    assert ordering._auc(beam, table, cost) == pytest.approx(ordering._auc(exact, table, cost))
+
+
+def test_beam_is_at_least_as_good_as_greedy():
+    recovered = {f"a{i}": b(*[f"p{i}-{j}" for j in range(i + 1)]) for i in range(12)}
+    # overlap a few so order actually matters
+    recovered["a3"] |= recovered["a1"]
+    recovered["a7"] |= recovered["a2"]
+    cost = [float(i % 4 + 1) for i in range(12)]
+    labels = list(recovered)
+    counts = ordering.signature_counts(recovered, labels)
+    table, _ = ordering.union_table(len(labels), counts)
+
+    greedy = ordering.greedy_order(12, table, cost)
+    beam = ordering.beam_search(12, table, cost, width=200)
+    assert ordering._auc(beam, table, cost) >= ordering._auc(greedy, table, cost) - 1e-9
+
+
+def test_large_jobs_are_approximate_but_complete():
+    """Above EXACT_ENUM_MAX the result is flagged approximate, carries a beam
+    width, still ranks best ≥ greedy, and `first_choice` covers every opener."""
+    n = 14
+    recovered = {f"a{i}": b(*[f"p{i}-{j}" for j in range(20)]) for i in range(n)}
+    # Make two attacks redundant so greedy can be beaten and order matters.
+    recovered["a9"] = set(recovered["a0"])
+    dur = {f"a{i}": float(i % 5 + 1) for i in range(n)}
+    r = ordering.summarise(recovered, n * 20, guesses=dur)
+
+    assert r["approximate"] is True
+    assert r["beam_width"] == ordering.BEAM_WIDTH
+    assert len(r["best"]["order"]) == n
+    assert r["best"]["efficiency"] >= r["greedy"]["efficiency"] - 1e-9
+    assert {e["label"] for e in r["first_choice"]} == {f"a{i}" for i in range(n)}
+    # The sample is deterministic, so a re-run scores identically.
+    assert ordering.summarise(recovered, n * 20, guesses=dur)["best"]["order"] == r["best"]["order"]
 
 
 def test_score_matches_a_brute_force_reference_implementation():
