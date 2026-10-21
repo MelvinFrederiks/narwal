@@ -122,10 +122,10 @@ export async function render(mount, route = "") {
   if (jobId) renderResult(jobId);
   poll();
 
-  async function submit({ name: jobName, goal, maxRuntime, suspect, attacks }) {
+  async function submit({ name: jobName, goal, maxRuntime, derived, attacks }) {
     const spec = { kind: "mergeability", goal, attacks: attacksToSpec(attacks) };
     if (maxRuntime) spec.max_runtime_s = Number(maxRuntime);
-    if (suspect?.length) spec.suspect_wordlists = suspect;
+    if (derived?.length) spec.suspect_wordlists = derived;
 
     const res = await fetch("/api/jobs", {
       method: "POST",
@@ -184,7 +184,7 @@ export async function render(mount, route = "") {
         </div>` : ""}
         ${(r.suspect_wordlists?.length || r.contaminated_total) ? `<div class="card info" style="margin-top:8px">
           <b>${num(r.contaminated_total || 0)}</b> recovered password${(r.contaminated_total === 1) ? " was" : "s were"}
-          set aside as dictionary contamination — goal words found verbatim in a suspect wordlist
+          set aside as dictionary contamination — goal words found verbatim in a derived list
           (${(r.suspect_wordlists || []).map((w) => `<code>${esc(w)}</code>`).join(", ") || "none"}). Rule-derived
           cracks are still counted. All indices below are on the cleaned sets.
         </div>` : ""}
