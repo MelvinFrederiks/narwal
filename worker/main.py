@@ -161,13 +161,14 @@ def _run_attacks(
 
         runs.append(run)
         log.info(
-            "job %s: attack %d/%d recovered %d of %d in %.1fs",
+            "job %s: attack %d/%d recovered %d of %d in %.1fs, %s guesses",
             job_id,
             index + 1,
             total,
             len(run.recovered),
             run.goal_loaded,
             run.duration_s,
+            f"{run.guesses:,}" if run.guesses is not None else "?",
         )
 
     return runs, warmup
@@ -189,7 +190,12 @@ def run_job(conn, job: dict) -> FinalJobResult:
     goal_size = max((r.goal_loaded for r in runs), default=0)
 
     if spec.kind == "ordering":
-        result = ordering.summarise(recovered, {r.label: r.duration_s for r in runs}, goal_size)
+        result = ordering.summarise(
+            recovered,
+            goal_size,
+            guesses={r.label: r.guesses for r in runs},
+            durations={r.label: r.duration_s for r in runs},
+        )
     else:
         result = metrics.summarise(recovered, goal_size)
 
@@ -252,13 +258,14 @@ def finalize(
             "indices below understate the true overlap."
         )
         if spec.kind == "ordering":
-            # Worse here than for mergeability: a capped attack's duration is
-            # the cap rather than its real cost, so the ranking is scheduling
-            # against a runtime that would not hold in a real run.
+            # Worse here than for mergeability: a capped attack is charged
+            # only for the guesses it made before the cap, not for its whole
+            # keyspace, so the ranking schedules against a cost that would
+            # not hold in a real run.
             result["partial_note"] += (
-                " A capped attack also reports the cap as its duration instead of "
-                "what it would really cost, so the ordering below is only valid "
-                "for runs under the same cap."
+                " A capped attack is also charged only for the guesses it made "
+                "before the cap rather than its whole keyspace, so the ordering "
+                "below is only valid for runs under the same cap."
             )
     return result
 

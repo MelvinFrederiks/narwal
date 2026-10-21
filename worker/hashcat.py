@@ -77,9 +77,13 @@ class AttackRun:
     goal_rejected: int = 0      # lines it refused (over-length, malformed)
     partial: bool = False       # stopped early, so `recovered` is a lower bound
     # Wall clock for the whole hashcat invocation, goal-file loading included.
-    # Loading is a real cost an operator pays, so it belongs in the number the
-    # ordering analysis schedules against (backend/jobs/ordering.py).
+    # Shown alongside an ordering result, but not what it ranks by.
     duration_s: float = 0.0
+    # Candidates hashcat actually tried (status-json `progress[0]`, summed over
+    # --increment steps) — the cost the ordering analysis ranks against
+    # (backend/jobs/ordering.py). Unlike a duration it does not depend on the
+    # host, the device, or a warm kernel cache. None if no status line came.
+    guesses: int | None = None
     log_path: Path | None = None
 
     @property
@@ -223,6 +227,11 @@ def run_attack(
 
     goal_loaded = goal_rejected = 0
     latest: dict | None = None
+    # Furthest progress seen per (base, mod) step. hashcat restarts its
+    # progress counter for every step of an --increment mask (and every file
+    # of a wordlist directory) and prints a final status for each, so the
+    # attack's guess count is the sum over steps, not the last line's number.
+    step_done: dict[tuple, int] = {}
     cancelled = False
 
     with log_path.open("w", encoding="utf-8", errors="replace") as fh:
@@ -248,6 +257,8 @@ def run_attack(
                 except json.JSONDecodeError:
                     continue
                 latest = _status_summary(status, attack.label)
+                step = latest["step"]
+                step_done[step] = max(step_done.get(step, 0), latest["done"])
                 if not should_continue(latest):
                     cancelled = True
                     break
@@ -279,6 +290,7 @@ def run_attack(
         goal_rejected=goal_rejected,
         partial=partial,
         duration_s=duration,
+        guesses=sum(step_done.values()) if step_done else None,
         log_path=log_path,
     )
 
@@ -288,8 +300,11 @@ def _status_summary(status: dict, label: str) -> dict:
     progress = status.get("progress") or [0, 0]
     recovered = status.get("recovered_hashes") or [0, 0]
     done, total = (progress + [0, 0])[:2]
+    guess = status.get("guess") or {}
     return {
         "attack": label,
+        # Which --increment step / wordlist file this progress belongs to.
+        "step": (guess.get("guess_base_offset"), guess.get("guess_mod_offset")),
         "done": done,
         "total": total,
         "fraction": (done / total) if total else 0.0,

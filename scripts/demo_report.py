@@ -16,8 +16,25 @@ import json
 import sys
 
 
+def guesses(n: float | None) -> str:
+    """Compact guess count: 456976 -> '457K', matching the web formatter."""
+    if n is None:
+        return "?"
+    n = float(n)
+    if n < 1000:
+        return f"{round(n):,}"
+    for base, suf in ((1e12, "T"), (1e9, "B"), (1e6, "M"), (1e3, "K")):
+        if n >= base:
+            v = n / base
+            return f"{round(v)}{suf}" if v >= 100 else f"{v:.1f}{suf}"
+    return f"{round(n):,}"
+
+
 def half(order: dict) -> float:
-    return next(m["time_s"] for m in order["milestones"] if m["fraction"] == 0.5)
+    """Cost at the 50% milestone, on whatever axis the job was scored (the
+    milestone carries `cost`; `time_s` is the fallback for an old result)."""
+    m = next(m for m in order["milestones"] if m["fraction"] == 0.5)
+    return m.get("cost") if m.get("cost") is not None else m.get("time_s")
 
 
 def main() -> int:
@@ -28,23 +45,31 @@ def main() -> int:
         print("  " + (job.get("error") or "no result")[:400])
         return 0
 
+    by_guesses = result.get("cost_axis") == "guesses"
+    unit = " guesses" if by_guesses else "s"
+
+    def cost(v: float | None) -> str:
+        return guesses(v) if by_guesses else f"{(v or 0):.1f}"
+
+    total = result.get("total_guesses") if by_guesses else result.get("total_runtime_s")
     print(f"  goal {result['goal_size']:,}   combined {result['combined_recovered']:,} "
           f"({result['combined_coverage']*100:.1f}%)   "
           f"{result['permutations_scored']:,} sequences from {len(result['attacks'])} "
-          f"runs totalling {result['total_runtime_s']:.0f}s")
+          f"runs totalling {cost(total)}{unit}")
     for a in sorted(result["attacks"], key=lambda a: -a["recovered"]):
-        print(f"    {a['label']:<18} {a['recovered']:>6,} in {a['duration_s']:>6.1f}s"
+        spent = guesses(a.get("guesses")) if by_guesses else f"{a.get('duration_s') or 0:.1f}s"
+        print(f"    {a['label']:<18} {a['recovered']:>6,} in {spent:>9}"
               f"   only-this {a['exclusive']:>6,}")
 
     best, worst, greedy = result["best"], result["worst"], result["greedy"]
     print(f"  best   {' -> '.join(best['order'])}")
-    print(f"         score {best['efficiency']*100:.1f}%, half the haul by {half(best):.1f}s")
+    print(f"         score {best['efficiency']*100:.1f}%, half the haul by {cost(half(best))}{unit}")
     print(f"  worst  {' -> '.join(worst['order'])}")
-    print(f"         score {worst['efficiency']*100:.1f}%, half the haul by {half(worst):.1f}s")
+    print(f"         score {worst['efficiency']*100:.1f}%, half the haul by {cost(half(worst))}{unit}")
     verdict = ("optimal" if greedy["is_optimal"]
                else f"beaten by {greedy['beaten_by']:,} sequences")
     print(f"  greedy {verdict}   ({' -> '.join(greedy['order'])})")
-    print(f"  reordering is worth {half(worst) - half(best):.1f}s to the halfway point")
+    print(f"  reordering is worth {cost(half(worst) - half(best))}{unit} to the halfway point")
     print()
     return 0
 
