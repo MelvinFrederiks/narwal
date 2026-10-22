@@ -737,14 +737,14 @@ export async function render(mount, route = "") {
       if (!showProfile) {
         // Single dataset: straight segments between measured nodes — the model
         // the score integrates — with the nodes themselves hoverable.
-        return [{ ...line, label: c.label, data: nodesOf(o), pointRadius: 3, pointHoverRadius: 5 }];
+        return [{ ...line, label: c.label, data: nodesOf(o), tangible: true, pointRadius: 3, pointHitRadius: 10, pointHoverRadius: 5 }];
       }
       // Profile on: a non-hittable measured line plus a line-less node layer, so
       // hover still lands only on step boundaries. The node layer has no legend
       // text (`label: ""`) but carries `_curve` so its tooltip names the curve.
       return [
-        { ...line, label: c.label, data: profileOf(o), pointRadius: 0, pointHitRadius: 0 },
-        { ...line, label: "", _curve: c.label, data: nodesOf(o), showLine: false, pointRadius: 3, pointHoverRadius: 5 },
+        { ...line, label: c.label, data: profileOf(o), tangible: false, pointRadius: 0, pointHitRadius: 0, pointHoverRadius: 0 },
+        { ...line, label: "", _curve: c.label, data: nodesOf(o), tangible: true, showLine: false, pointRadius: 3, pointHitRadius: 10, pointHoverRadius: 5 },
       ];
     });
 
@@ -755,12 +755,16 @@ export async function render(mount, route = "") {
         responsive: true,
         maintainAspectRatio: false,
         parsing: false,
-        interaction: { mode: "nearest", intersect: false },
+        interaction: { mode: "point", intersect: false },
         plugins: {
           legend: { labels: { color: cssVar("--text-secondary"), usePointStyle: true, filter: (i) => !!i.text } },
           tooltip: {
+            filter: (item) => item.dataset.tangible === true,
             callbacks: {
-              title: (items) => `after ${C.fmt(items[0].parsed.x)}${C.guesses ? " guesses" : ""}`,
+              title: (items) => {
+                if (!items.length) return '';
+                return `after ${C.fmt(items[0].parsed.x)}${C.guesses ? " guesses" : ""}`
+              },
               label: (ctx) => {
                 const name = ctx.dataset.label || ctx.dataset._curve || "";
                 const step = ctx.raw?._step;
@@ -869,16 +873,16 @@ export async function render(mount, route = "") {
         tension: 0,
       };
       if (!showProfile) {
-        return [{ ...line, label: c.label, data: flatStairs(o), pointRadius: 0, pointHoverRadius: 4 }];
+        return [{ ...line, label: c.label, tangible: true, data: flatStairs(o), pointRadius: 0, pointHitRadius: 10, pointHoverRadius: 4 }];
       }
       const { raw, smooth } = profileRates(o);
       // Node markers at each step boundary carry the step summary and are the only
       // hoverable points; raw and smooth lines are drawn but not hittable.
       const nodes = o.steps.map((s) => ({ x: C.cum(s), y: C.gainRate(s) || null, _step: s }));
       return [
-        { ...line, label: "", borderColor: c.color + "55", borderWidth: 1, borderDash: [], data: raw, pointRadius: 0, pointHitRadius: 0 },
-        { ...line, label: c.label, data: smooth, pointRadius: 0, pointHitRadius: 0 },
-        { ...line, label: "", _curve: c.label, data: nodes, showLine: false, pointRadius: 3, pointHoverRadius: 5 },
+        { ...line, label: "", tangible: false, borderColor: c.color + "55", borderWidth: 1, borderDash: [], data: raw, pointRadius: 0, pointHitRadius: 0, pointHoverRadius: 0 },
+        { ...line, label: c.label, tangible: false, data: smooth, pointRadius: 0, pointHitRadius: 0, pointHoverRadius: 0 },
+        { ...line, label: "", tangible: true, _curve: c.label, data: nodes, showLine: false, pointRadius: 3, pointHitRadius: 10, pointHoverRadius: 5 },
       ];
     });
 
@@ -889,12 +893,16 @@ export async function render(mount, route = "") {
         responsive: true,
         maintainAspectRatio: false,
         parsing: false,
-        interaction: { mode: "nearest", intersect: false },
+        interaction: { mode: "point", intersect: false },
         plugins: {
           legend: { labels: { color: cssVar("--text-secondary"), usePointStyle: true, filter: (i) => !!i.text } },
           tooltip: {
+            filter: (item) => item.dataset.tangible === true,
             callbacks: {
-              title: (items) => `after ${C.fmt(items[0].parsed.x)}${C.guesses ? " guesses" : ""}`,
+              title: (items) => {
+                if (!items.length) return '';
+                return `after ${C.fmt(items[0].parsed.x)}${C.guesses ? " guesses" : ""}`
+              },
               label: (ctx) => {
                 const name = ctx.dataset.label || ctx.dataset._curve || "";
                 const step = ctx.raw?._step;
