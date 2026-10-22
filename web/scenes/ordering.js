@@ -54,6 +54,7 @@ const CURVES = [
 export async function render(mount, route = "") {
   const jobId = (route || "").trim();
 
+  mount.style.maxWidth = "1600px";
   mount.innerHTML = `
     <div class="panel">
       <h2>Attack order</h2>

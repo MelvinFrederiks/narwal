@@ -42,6 +42,7 @@ const POLL_MS = 3000;
 export async function render(mount, route = "") {
   const jobId = (route || "").trim();
 
+  mount.style.maxWidth = "1600px";
   mount.innerHTML = `
     <div class="panel">
       <h2>Mergeability</h2>
