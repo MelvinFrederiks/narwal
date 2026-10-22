@@ -15,7 +15,8 @@ from __future__ import annotations
 from fastapi import APIRouter, Body, HTTPException
 
 from .. import config
-from ..jobs import db, ordering, wakeup, spec as spec_mod
+from ..jobs import db, ordering, wakeup
+from ..jobs import spec as spec_mod
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
@@ -34,22 +35,16 @@ def job_config() -> dict:
     one there is nothing a job could legally reference, so the scene shows a
     setup hint instead of a broken form.
     """
-    rules = []
-    if config.rules_root is not None:
-        rules = sorted(
-            p.relative_to(config.rules_root).as_posix()
-            for p in config.rules_root.rglob("*.rule")
-            if p.is_file()
-        )
     return {
         "enabled": config.wordlists_root is not None,
         "modes": sorted(spec_mod.MODES),
         "kinds": list(spec_mod.KINDS),
-        "rules": rules,
+        "rules": [],  # Will be set on page load for now
         "max_attacks": spec_mod.MAX_ATTACKS,
-        # An ordering job enumerates every permutation, so its own cap is
-        # lower (or equal) and the builder has to know which one applies.
-        "max_ordering_attacks": min(spec_mod.MAX_ATTACKS, ordering.MAX_ORDER_ATTACKS),
+        # An ordering job has its own (higher) cap — it beam-searches above the
+        # exact-enumeration threshold instead of enumerating every permutation,
+        # so the builder has to know which one applies.
+        "max_ordering_attacks": ordering.MAX_ORDER_ATTACKS,
         "max_rules": spec_mod.MAX_RULES,
     }
 

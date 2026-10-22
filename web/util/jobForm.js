@@ -30,7 +30,22 @@ export const STATUS_PILL = {
 export const kindOf = (job) => job?.spec?.kind || "mergeability";
 
 export function emptyAttack() {
-  return { label: "", mode: "wordlist", wordlist: "", rules: [], mask: "" };
+  return { label: "", mode: "wordlist", wordlist: "", rules: [], mask: "", charsets: {} };
+}
+
+// Which custom charsets (?1–?4) a mask references, in order. Mirrors the token
+// walk in backend/jobs/spec.py::_validate_mask — `??` is a literal '?', so the
+// char after a lone '?' is the token and is consumed with it.
+export function maskCharsetRefs(mask) {
+  const refs = new Set();
+  for (let i = 0; i < mask.length; i++) {
+    if (mask[i] !== "?") continue;
+    const n = mask[i + 1];
+    if (n === "?") { i++; continue; }
+    if (n >= "1" && n <= "4") refs.add(n);
+    i++;
+  }
+  return [...refs].sort();
 }
 
 // ── attack builder ─────────────────────────────────────────────────────────
@@ -47,6 +62,11 @@ export function attackBuilder({
 }) {
   const state = {
     name: "", goal: "", maxRuntime: "",
+    // Wordlists the caller marks as possibly derived from the goal. Held as an
+    // array and shown as removable chips; `_derivedDraft` keeps whatever is
+    // half-typed in the add-input across the full re-renders that adding or
+    // removing an attack triggers.
+    derived: [], _derivedDraft: "",
     attacks, submitting: false, error: "",
   };
   const id = (suffix) => `${prefix}-${suffix}`;
@@ -64,6 +84,16 @@ export function attackBuilder({
         <label for="${id("goal")}" style="font-size:13px;color:var(--text-secondary)">Goal wordlist</label>
         <input type="text" id="${id("goal")}" list="${id("files")}"
                placeholder="the passwords you are trying to recover" value="${esc(state.goal)}"/>
+        <label for="${id("derived-add")}" style="font-size:13px;color:var(--text-secondary)">Derived lists</label>
+        <span>
+          <input type="text" id="${id("derived-add")}" list="${id("files")}" style="width:100%"
+                 placeholder="optional — wordlists that may be built from the goal; type and press Enter"
+                 value="${esc(state._derivedDraft)}"/>
+          <span class="sub" style="display:block;margin:4px 0 0;font-size:12px">
+            a verbatim goal word found in one of these is set aside, not counted; rule-derived cracks still count.
+          </span>
+          <div id="${id("derived-chips")}"></div>
+        </span>
         <label for="${id("runtime")}" style="font-size:13px;color:var(--text-secondary)">Time cap</label>
         <span style="display:flex;gap:8px;align-items:center">
           <input type="number" id="${id("runtime")}" min="1" max="86400" style="width:120px"
@@ -111,11 +141,11 @@ export function attackBuilder({
         </div>
         <div style="display:grid;grid-template-columns:auto 1fr;gap:8px 12px;align-items:center;font-size:13px">
           ${needsWordlist ? `
-            <label style="color:var(--text-secondary)">Wordlist</label>
+            <label class="attack-option" style="color:var(--text-secondary)">Wordlist</label>
             <input type="text" data-field="wordlist" list="${id("files")}" value="${esc(a.wordlist)}"
                    placeholder="candidate list"/>` : ""}
           ${a.mode === "wordlist" ? `
-            <label style="color:var(--text-secondary)">Rules</label>
+            <label class="attack-option" style="color:var(--text-secondary)">Rules</label>
             <span style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
               <input type="text" data-field="rules" list="${id("rules")}" value="${esc(a.rules.join(", "))}"
                      placeholder="optional — comma-separated, e.g. best64.rule" style="flex:1;min-width:200px"/>
@@ -125,11 +155,23 @@ export function attackBuilder({
               <span class="sub" style="margin:0;font-size:11px">max ${cfg.max_rules}</span>
             </span>` : ""}
           ${needsMask ? `
-            <label style="color:var(--text-secondary)">Mask</label>
+            <label class="attack-option" style="color:var(--text-secondary)">Mask</label>
             <input type="text" data-field="mask" value="${esc(a.mask)}"
-                   placeholder="?u?l?l?l?d?d?d?d" style="font-family:'SF Mono',Menlo,Consolas,monospace"/>` : ""}
+                   placeholder="?u?l?l?l?d?d?d?d" style="font-family:'SF Mono',Menlo,Consolas,monospace"/>
+            <div data-charsets="${i}" style="display:contents">${charsetRowsHtml(a)}</div>` : ""}
         </div>
       </div>`;
+  }
+
+  // One row per custom charset the mask references. Rebuilt in place as the mask
+  // is edited (see wire()), so the boxes appear and disappear without a full
+  // re-render that would steal focus from the mask input.
+  function charsetRowsHtml(a) {
+    return maskCharsetRefs(a.mask).map((d) => `
+      <label class="attack-option" style="color:var(--text-secondary)">Charset ?${d}</label>
+      <input type="text" data-charset="${d}" value="${esc(a.charsets?.[d] || "")}"
+             placeholder="e.g. ?l?s or abc0123456789"
+             style="font-family:'SF Mono',Menlo,Consolas,monospace"/>`).join("");
   }
 
   // Pull the three top-level fields into state. Called before every re-render
@@ -138,11 +180,62 @@ export function attackBuilder({
     state.name = q("name").value;
     state.goal = q("goal").value;
     state.maxRuntime = q("runtime").value;
+    state._derivedDraft = q("derived-add").value;
+  }
+
+  // Rebuild only the derived-list chips, so the add-input keeps its focus and
+  // caret. Chip styling mirrors the analysis tabs' file chips.
+  function renderDerived() {
+    const box = q("derived-chips");
+    box.innerHTML = state.derived.map((namev, i) => `
+      <span style="display:inline-flex;align-items:center;gap:6px;padding:3px 8px;border:1px solid var(--border-2);border-radius:14px;font-size:12px;margin:6px 6px 0 0">
+        ${esc(namev)}
+        <button data-rm-derived="${i}" title="remove" style="border:0;background:none;cursor:pointer;color:var(--text-secondary);padding:0 2px;font-size:14px;line-height:1">×</button>
+      </span>`).join("");
+    for (const b of box.querySelectorAll("[data-rm-derived]")) {
+      b.addEventListener("click", () => {
+        state.derived.splice(Number(b.dataset.rmDerived), 1);
+        renderDerived();
+      });
+    }
+  }
+
+  // Add one or more names (comma-separated input is split), skipping blanks and
+  // duplicates, then clear the add-input and refresh the chips.
+  function addDerived(raw) {
+    for (const name of raw.split(",").map((s) => s.trim()).filter(Boolean)) {
+      if (!state.derived.includes(name)) state.derived.push(name);
+    }
+    const add = q("derived-add");
+    add.value = "";
+    state._derivedDraft = "";
+    renderDerived();
   }
 
   function wire() {
     for (const suffix of ["name", "goal", "runtime"]) {
       q(suffix).addEventListener("input", readTop);
+    }
+    const addInput = q("derived-add");
+    addInput.addEventListener("input", () => { state._derivedDraft = addInput.value; });
+    addInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        addDerived(addInput.value);
+      }
+    });
+    renderDerived();
+
+    // Bind the charset boxes inside one card's [data-charsets] container to
+    // state. Called on first wire and again whenever the mask edit rebuilds them.
+    function bindCharsets(card, i) {
+      const box = card.querySelector(`[data-charsets="${i}"]`);
+      if (!box) return;
+      for (const input of box.querySelectorAll("[data-charset]")) {
+        input.addEventListener("input", () => {
+          (state.attacks[i].charsets ??= {})[input.dataset.charset] = input.value;
+        });
+      }
     }
 
     for (const card of mount.querySelectorAll("[data-attack]")) {
@@ -155,6 +248,15 @@ export function attackBuilder({
           } else {
             state.attacks[i][field] = input.value;
           }
+          // A mask edit changes which ?1–?4 boxes should exist; rebuild just
+          // this card's charset rows so the mask input keeps focus and caret.
+          if (field === "mask") {
+            const box = card.querySelector(`[data-charsets="${i}"]`);
+            if (box) {
+              box.innerHTML = charsetRowsHtml(state.attacks[i]);
+              bindCharsets(card, i);
+            }
+          }
         });
         // Changing the mode changes which fields exist, so this one re-renders.
         if (field === "mode") {
@@ -165,6 +267,7 @@ export function attackBuilder({
           });
         }
       }
+      bindCharsets(card, i);
       const rm = card.querySelector("[data-remove]");
       if (rm) {
         rm.addEventListener("click", () => {
@@ -185,6 +288,9 @@ export function attackBuilder({
 
   async function submit() {
     state.error = "";
+    // Commit a name typed into the add-input but not yet turned into a chip, so
+    // it is not silently dropped on submit.
+    addDerived(q("derived-add").value);
     state.submitting = true;
     render();
     try {
@@ -192,6 +298,7 @@ export function attackBuilder({
         name: state.name.trim(),
         goal: state.goal.trim(),
         maxRuntime: state.maxRuntime.trim(),
+        derived: [...state.derived],
         attacks: state.attacks,
       });
       return; // a successful submit navigates away; leave the form disabled
@@ -211,7 +318,15 @@ export function attacksToSpec(attacks) {
   return attacks.map((a, i) => {
     const out = { label: a.label.trim() || `attack ${i + 1}`, mode: a.mode };
     if (a.mode !== "mask") out.wordlist = a.wordlist.trim();
-    if (a.mode !== "wordlist") out.mask = a.mask.trim();
+    if (a.mode !== "wordlist") {
+      out.mask = a.mask.trim();
+      const cs = {};
+      for (const d of maskCharsetRefs(out.mask)) {
+        const v = (a.charsets?.[d] || "").trim();
+        if (v) cs[d] = v;
+      }
+      if (Object.keys(cs).length) out.charsets = cs;
+    }
     if (a.mode === "wordlist" && a.rules.length) out.rules = a.rules;
     return out;
   });

@@ -263,7 +263,16 @@ def test_ordering_job_end_to_end(env):
     assert by_label["subset"]["recovered"] == 1
     assert by_label["subset"]["exclusive"] == 0
 
-    # Real wall-clock timings came back, and they are what the ranking used.
+    # Guess counts came back from hashcat's status lines, exactly, and they
+    # are what the ranking used. A plain wordlist costs one guess per line; a
+    # mask that cracks only part of the goal runs its whole keyspace.
+    assert r["cost_axis"] == "guesses"
+    assert by_label["dict"]["guesses"] == len(WL_A)
+    assert by_label["subset"]["guesses"] == 1
+    assert by_label["sixlower"]["guesses"] == 26**6
+    assert r["total_guesses"] == sum(a["guesses"] for a in r["attacks"])
+
+    # Wall-clock timings still come along for display.
     assert r["timing_available"] is True
     assert all(a["duration_s"] > 0 for a in r["attacks"])
     assert r["total_runtime_s"] == pytest.approx(
@@ -275,13 +284,14 @@ def test_ordering_job_end_to_end(env):
     assert len(cumulative) == 3
     assert cumulative == sorted(cumulative)
     assert cumulative[-1] == 4
+    assert r["best"]["steps"][-1]["cumulative_guesses"] == r["total_guesses"]
     assert r["best"]["steps"][-1]["elapsed_s"] == pytest.approx(r["total_runtime_s"])
 
-    # `subset` can never be the only way to a password, so it contributes
-    # nothing wherever it lands after one of the others. Which exact slot it
-    # takes depends on the measured runtimes, so that is not asserted — but the
-    # slow brute force must never open an optimal sequence.
-    assert r["best"]["order"][0] != "sixlower"
+    # Ranked by guesses, the answer no longer depends on this host's speed:
+    # `dict` finds 3 in 4 guesses, the brute force adds the last one, and
+    # `subset` — which adds nothing new after `dict` — goes last, where its
+    # guess no longer delays anything.
+    assert r["best"]["order"] == ["dict", "sixlower", "subset"]
     assert r["best"]["steps"][-1]["cumulative"] == 4
     assert r["best"]["efficiency"] >= r["worst"]["efficiency"]
     assert r["greedy"]["efficiency"] <= r["best"]["efficiency"] + 1e-12
@@ -293,7 +303,7 @@ def test_warm_up_takes_the_kernel_compile_out_of_the_measurement(env, monkeypatc
 
     hashcat compiles an OpenCL kernel the first time it sees a given attack
     mode. Without a warm-up that cost is charged to whichever attack used the
-    mode first, and an ordering job schedules against exactly those durations.
+    mode first, and an ordering result reports exactly those durations.
     Here both attacks are the same wordlist against the same goal list, so
     their true costs are identical — any large gap between them is compilation,
     not work.
@@ -393,4 +403,57 @@ def test_outfile_check_dir_does_not_leak_between_attacks(env):
     # zzzzzz and abcdef. abcdef is the one `dict` already wrote out.
     assert by_label["sixlower"]["recovered"] == 2
     assert job["result"]["pairs"][0]["shared"] == 1
+    conn.close()
+
+
+def test_suspect_wordlist_sets_aside_verbatim_but_keeps_derivations(env):
+    """A dictionary flagged suspect: a goal word sitting in it verbatim is set
+    aside, while a goal word a rule *derived* from a (non-goal) base is kept.
+
+    `sdict` holds `password12`, `hello`, `secret`. Against goal `{password123,
+    hello!, secret, zzzzzz}` with rules identity/`$3`/`$!`:
+      - password123 ← password12 + $3   (derived, base != plain)  → kept
+      - hello!       ← hello + $!        (derived)                 → kept
+      - secret       ← secret + identity (verbatim, base == plain) → set aside
+    """
+    from worker import main as worker_main
+
+    library = config.wordlists_root
+    (library / "goal2.txt").write_text("password123\nhello!\nsecret\nzzzzzz\n")
+    (library / "sdict.txt").write_text("password12\nhello\nsecret\n")
+    (library / "zcl.txt").write_text("zzzzzz\n")
+    (library / "derive.rule").write_text(":\n$3\n$!\n")
+
+    conn = db.connect()
+    db.init(conn)
+    job_id = db.enqueue(conn, {
+        "kind": "ordering",
+        "goal": "goal2.txt",
+        "suspect_wordlists": ["sdict.txt"],
+        "attacks": [
+            {"label": "sus", "mode": "wordlist", "wordlist": "sdict.txt", "rules": ["derive.rule"]},
+            {"label": "clean", "mode": "wordlist", "wordlist": "zcl.txt"},
+        ],
+    }, name="contamination")
+
+    assert worker_main.process_one(conn) is True
+    job = db.get(conn, job_id)
+    assert job["status"] == "done", job["error"]
+    r = job["result"]
+
+    by = {a["label"]: a for a in r["attacks"]}
+    # The suspect attack: secret set aside, the two derivations kept.
+    assert by["sus"]["suspect"] is True
+    assert by["sus"]["contaminated"] == 1
+    assert by["sus"]["recovered"] == 2        # password123, hello! — secret excluded
+    # The clean attack is untouched.
+    assert by["clean"]["suspect"] is False
+    assert by["clean"]["contaminated"] == 0
+    assert by["clean"]["recovered"] == 1      # zzzzzz
+
+    assert r["contaminated_total"] == 1
+    assert r["suspect_wordlists"] == ["sdict.txt"]
+    # secret is credited to nobody, so the combined haul is 3 of 4, not 4.
+    assert r["combined_recovered"] == 3
+    assert r["goal_size"] == 4
     conn.close()

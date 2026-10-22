@@ -194,6 +194,16 @@
         background: var(--surface-2); border-radius: var(--radius-md);
       }
       code { font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 12px; }
+      .attack-option { position: relative; }
+      .attack-option::after {
+          content: "Charset ?1";
+          display: block;
+          height: 0;
+          overflow: hidden;
+          visibility: hidden;
+          white-space: nowrap;
+      }
+
     </style>
   </head>
   <body>

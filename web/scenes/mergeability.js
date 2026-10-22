@@ -25,7 +25,7 @@
 // Routing: `#mergeability` is the builder, `#mergeability/<job-id>` shows one
 // result — so a finished analysis is a reloadable, shareable URL.
 
-import { listServerFiles } from "../util/serverFiles.js";
+import { listServerFiles, listRuleFiles } from "../util/serverFiles.js";
 import { vennLayout } from "../util/venn.js";
 import {
   MODE_LABELS, attackBuilder, attacksToSpec, emptyAttack, jobList,
@@ -42,6 +42,7 @@ const POLL_MS = 3000;
 export async function render(mount, route = "") {
   const jobId = (route || "").trim();
 
+  mount.style.maxWidth = "1600px";
   mount.innerHTML = `
     <div class="panel">
       <h2>Mergeability</h2>
@@ -77,16 +78,21 @@ export async function render(mount, route = "") {
 
   let cfg = { enabled: false, rules: [], max_attacks: 8, max_rules: 4 };
   let files = [];
+  let rules = [];
 
   try {
-    [cfg, files] = await Promise.all([
+    [cfg, files, rules] = await Promise.all([
       fetch("/api/jobs/config").then((r) => r.json()),
-      listServerFiles(""),
+      listServerFiles(".dict,.masks,.txt"),
+      rules = listRuleFiles(".rule"),
     ]);
   } catch (err) {
     setupBox.innerHTML = `<div class="card danger">could not reach the job API: ${esc(err.message)}</div>`;
     return;
   }
+
+  // Load rules into config
+  cfg.rules = rules.map(f => f.path)
 
   const jobs = jobList({
     mount: mount.querySelector("#jobs"),
@@ -117,9 +123,10 @@ export async function render(mount, route = "") {
   if (jobId) renderResult(jobId);
   poll();
 
-  async function submit({ name: jobName, goal, maxRuntime, attacks }) {
+  async function submit({ name: jobName, goal, maxRuntime, derived, attacks }) {
     const spec = { kind: "mergeability", goal, attacks: attacksToSpec(attacks) };
     if (maxRuntime) spec.max_runtime_s = Number(maxRuntime);
+    if (derived?.length) spec.suspect_wordlists = derived;
 
     const res = await fetch("/api/jobs", {
       method: "POST",
@@ -175,6 +182,12 @@ export async function render(mount, route = "") {
           hashcat rejected ${num(r.goal_rejected)} line(s) of the goal file — over its 256-character
           limit, or otherwise unparseable. Coverage below is measured against the
           ${num(r.goal_size)} that did load.
+        </div>` : ""}
+        ${(r.suspect_wordlists?.length || r.contaminated_total) ? `<div class="card info" style="margin-top:8px">
+          <b>${num(r.contaminated_total || 0)}</b> recovered password${(r.contaminated_total === 1) ? " was" : "s were"}
+          set aside as dictionary contamination — goal words found verbatim in a derived list
+          (${(r.suspect_wordlists || []).map((w) => `<code>${esc(w)}</code>`).join(", ") || "none"}). Rule-derived
+          cracks are still counted. All indices below are on the cleaned sets.
         </div>` : ""}
 
         <div class="card success" style="margin-top:12px">
