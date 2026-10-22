@@ -342,10 +342,6 @@ export async function render(mount, route = "") {
         </div>
         ${signaturesHtml(r)}
 
-        <div style="font-weight:500;margin:22px 0 8px">
-          Top ${r.top.length} sequences
-        </div>
-
         <div class="note">
           <b>Score</b> is the area under the recovery curve divided by (total recovered × total
           ${C.guesses ? "guesses" : "runtime"}): 1 would be everything found
