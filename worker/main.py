@@ -231,6 +231,10 @@ def finalize(
             suspect=attack.suspect,
             # Verbatim goal hits set aside for this attack (0 unless suspect).
             contaminated=len(run.contaminated),
+            # Within-attack recovery measured from crack_pos (None for a
+            # multi-step attack or a pre-crack_pos result) — see hashcat.py.
+            recovery_profile=run.recovery_profile,
+            recovery_profile_basis=run.recovery_profile_basis,
         )
 
     # What each side of a pair uniquely contributes — the concrete answer to

@@ -39,6 +39,11 @@ export const name = "ordering";
 
 const POLL_MS = 3000;
 
+// Rolling-average window (in profile buckets) for the efficiency chart's
+// smoothed line. The raw per-bucket rate is spiky — small integer crack counts
+// over a 64-bucket profile — so the bold line averages over this many buckets.
+const EFF_SMOOTH = 5;
+
 // Best / greedy / worst, in the order they are drawn and listed.
 const CURVES = [
   { key: "best", label: "Best order", color: "#1C7C54" },     // success green
@@ -185,6 +190,13 @@ export async function render(mount, route = "") {
     const C = costCtx(r);
     const best = r.best;
     const worst = r.worst;
+    // Per-attack lookup for the recovery-profile overlay, keyed by the label the
+    // ordering steps carry. `hasProfile` gates the two "show recovery profile"
+    // checkboxes — an old result or an all-`--increment` job has none.
+    const profiles = new Map(r.attacks.map((a) => [a.label, a]));
+    const hasProfile = r.attacks.some(
+      (a) => Array.isArray(a.recovery_profile) && a.recovery_profile.length
+    );
     // Cost to half the haul, best against worst: the single number that says
     // whether reordering is worth anybody's attention.
     const saved = halfOf(worst) != null && halfOf(best) != null
@@ -231,14 +243,60 @@ export async function render(mount, route = "") {
 
         ${headlineHtml(r, best, worst, saved)}
 
-        <div style="font-weight:500;margin:22px 0 8px">Recovery over ${C.noun}</div>
+        <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin:22px 0 8px">
+          <span style="font-weight:500">Recovery over ${C.noun}</span>
+          ${hasProfile ? `<label style="display:flex;align-items:center;gap:6px;font-size:12px;
+                        color:var(--text-secondary);cursor:pointer"
+                 title="Replace the straight within-attack segments with the measured recovery shape (from hashcat crack_pos), pinned to the same measured endpoints.">
+            <input type="checkbox" id="or-curve-profile"/>
+            show recovery profile
+          </label>` : ""}
+        </div>
         <div class="chart-wrap" style="height:340px"><canvas id="or-curve"></canvas></div>
         <div class="sub" style="font-size:12px;margin-top:6px">
-          Each marker is the end of one attack. Within an attack recovery is drawn as a straight
-          line, because hashcat reports how many goal entries an attack found and ${
-            C.guesses ? "how many guesses it made but not which entry it found at which guess"
-            : "how long it took but not which entry it found at which second"
-          } — so the markers are measured and the lines between them are the one assumption in here.
+          Each marker is the end of one attack${hasProfile ? "" : ", and the markers are measured"}.
+          ${hasProfile
+            ? `With <b>show recovery profile</b> off, recovery within an attack is drawn as a straight
+               line (the one modelling assumption); on, the segment follows the <b>measured</b> crack_pos
+               shape — scaled so its endpoints stay on the measured markers, so only the curve between
+               them changes. An <code>--increment</code> attack has no single profile and stays straight.`
+            : `Within an attack recovery is drawn as a straight line, because hashcat reports how many
+               goal entries an attack found and ${
+                 C.guesses ? "how many guesses it made but not which entry it found at which guess"
+                 : "how long it took but not which entry it found at which second"
+               } — so the lines between the markers are the one assumption in here.`}
+        </div>
+
+        <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;margin:22px 0 8px">
+          <span style="font-weight:500">Efficiency — recovery per ${C.guesses ? "guess" : "second"}</span>
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;
+                        color:var(--text-secondary);cursor:pointer"
+                 title="Switch the vertical axis (recovery rate) between a logarithmic and a linear scale.">
+            <input type="checkbox" id="or-eff-log" checked/>
+            logarithmic
+          </label>
+          ${hasProfile ? `<label style="display:flex;align-items:center;gap:6px;font-size:12px;
+                        color:var(--text-secondary);cursor:pointer"
+                 title="Draw the measured within-attack rate (from hashcat crack_pos) instead of one flat step per attack: a faint raw per-bucket rate plus a bold rolling average.">
+            <input type="checkbox" id="or-eff-profile"/>
+            show recovery profile
+          </label>` : ""}
+        </div>
+        <div class="chart-wrap" style="height:300px"><canvas id="or-eff"></canvas></div>
+        <div class="sub" style="font-size:12px;margin-top:6px">
+          The slope of the curve above, drawn directly: how many new passwords each ${
+            C.guesses ? "guess buys" : "second buys"
+          }. ${hasProfile
+            ? `With <b>show recovery profile</b> off, each attack is one flat step (its total cracks over
+               its total ${C.guesses ? "guesses" : "runtime"}). On, the within-attack rate is drawn from
+               hashcat crack_pos — the faint line is the raw per-bucket rate (rough and device-dependent),
+               the bold line a rolling average over ${EFF_SMOOTH} buckets.`
+            : `Each attack is a flat step — hashcat reports its total cracks and ${
+                C.guesses ? "guesses" : "runtime"
+              }, not which crack landed when — so the rate is constant within an attack and drops at
+               each boundary.`}
+          On a log axis you can watch it fall across orders of magnitude; where it craters is the point
+          past which running longer stops paying for itself.
         </div>
 
         <div style="font-weight:500;margin:22px 0 8px">The recommended run order</div>
@@ -313,7 +371,48 @@ export async function render(mount, route = "") {
         </div>
       </div>`;
 
-    drawCurve(r);
+    // The job is finished, so renderResult (and this wiring) runs once; the poll
+    // loop stops re-rendering a done job. Each "show recovery profile" checkbox
+    // rebuilds its chart (the dataset set changes too much to mutate in place),
+    // keeping a live reference so the efficiency chart's log toggle still reaches
+    // the current instance after a rebuild.
+    let curveChart = drawCurve(r, false);
+    let effChart = drawEfficiency(r, false);
+
+    const rebuild = (chart, make) => {
+      if (chart) {
+        charts = charts.filter((c) => c !== chart);
+        chart.destroy();
+      }
+      return make();
+    };
+
+    const curveProfileBox = resultBox.querySelector("#or-curve-profile");
+    if (curveProfileBox) {
+      curveProfileBox.addEventListener("change", (e) => {
+        curveChart = rebuild(curveChart, () => drawCurve(r, e.target.checked));
+      });
+    }
+
+    const effProfileBox = resultBox.querySelector("#or-eff-profile");
+    if (effProfileBox) {
+      effProfileBox.addEventListener("change", (e) => {
+        effChart = rebuild(effChart, () => drawEfficiency(r, e.target.checked));
+      });
+    }
+
+    // Second chart: the derivative of the one above — recovery rate per unit
+    // cost — with a log/linear toggle. drawEfficiency reads #or-eff-log for its
+    // initial axis, so the log choice survives a profile rebuild too.
+    const logBox = resultBox.querySelector("#or-eff-log");
+    if (logBox) {
+      logBox.addEventListener("change", (e) => {
+        if (!effChart) return;
+        effChart.options.scales.y.type = e.target.checked ? "logarithmic" : "linear";
+        effChart.options.scales.y.beginAtZero = !e.target.checked;
+        effChart.update();
+      });
+    }
   }
 
   function headlineHtml(r, best, worst, saved) {
@@ -589,31 +688,65 @@ export async function render(mount, route = "") {
   }
 
   // ── chart ────────────────────────────────────────────────────────────────
-  function drawCurve(r) {
+  function drawCurve(r, showProfile) {
     const canvas = resultBox.querySelector("#or-curve");
-    if (!canvas || typeof Chart === "undefined") return;
+    if (!canvas || typeof Chart === "undefined") return null;
     const C = costCtx(r);
+    const prof = new Map(r.attacks.map((a) => [a.label, a]));
 
-    const datasets = CURVES.filter((c) => r[c.key]).map((c) => {
+    // Node markers: (0, 0) then one point per finished attack — always measured,
+    // always the only hoverable points (see the caption's hover note).
+    const nodesOf = (o) =>
+      [{ x: 0, y: 0 }].concat(o.steps.map((s) => ({ x: C.cum(s), y: s.cumulative, _step: s })));
+
+    // The dense within-attack path. Each step either follows the measured
+    // crack_pos shape (scaled so its endpoints stay on the measured nodes) or,
+    // with no profile, draws the straight segment to its node.
+    const profileOf = (o) => {
+      const data = [{ x: 0, y: 0 }];
+      let cumStart = 0;
+      for (const s of o.steps) {
+        const cumEnd = C.cum(s);
+        const span = C.one(s);
+        const p = usableProfile(prof.get(s.label));
+        if (p && span != null) {
+          const last = p[p.length - 1];
+          const cumBefore = s.cumulative - s.gain;
+          for (let j = 0; j < p.length; j++) {
+            data.push({ x: cumStart + ((j + 1) / p.length) * span, y: cumBefore + (p[j] / last) * s.gain });
+          }
+        } else {
+          data.push({ x: cumEnd, y: s.cumulative });
+        }
+        cumStart = cumEnd;
+      }
+      return data;
+    };
+
+    const datasets = CURVES.filter((c) => r[c.key]).flatMap((c) => {
       const o = r[c.key];
-      return {
-        label: c.label,
-        // (0, 0) then one point per finished attack. Straight segments between
-        // them are exactly the model the score integrates — see the caption.
-        data: [{ x: 0, y: 0 }].concat(
-          o.steps.map((s) => ({ x: C.cum(s), y: s.cumulative, _step: s }))
-        ),
+      const line = {
         borderColor: c.color,
         backgroundColor: c.color,
         borderWidth: c.key === "best" ? 2.5 : 1.5,
         borderDash: c.key === "greedy" ? [5, 4] : [],
-        pointRadius: 3,
-        pointHoverRadius: 5,
         tension: 0,
       };
+      if (!showProfile) {
+        // Single dataset: straight segments between measured nodes — the model
+        // the score integrates — with the nodes themselves hoverable.
+        return [{ ...line, label: c.label, data: nodesOf(o), pointRadius: 3, pointHoverRadius: 5 }];
+      }
+      // Profile on: a non-hittable measured line plus a line-less node layer, so
+      // hover still lands only on step boundaries. The node layer has no legend
+      // text (`label: ""`) but carries `_curve` so its tooltip names the curve.
+      return [
+        { ...line, label: c.label, data: profileOf(o), pointRadius: 0, pointHitRadius: 0 },
+        { ...line, label: "", _curve: c.label, data: nodesOf(o), showLine: false, pointRadius: 3, pointHoverRadius: 5 },
+      ];
     });
 
-    charts.push(new Chart(canvas, {
+    const chart = new Chart(canvas, {
       type: "line",
       data: { datasets },
       options: {
@@ -622,14 +755,15 @@ export async function render(mount, route = "") {
         parsing: false,
         interaction: { mode: "nearest", intersect: false },
         plugins: {
-          legend: { labels: { color: cssVar("--text-secondary"), usePointStyle: true } },
+          legend: { labels: { color: cssVar("--text-secondary"), usePointStyle: true, filter: (i) => !!i.text } },
           tooltip: {
             callbacks: {
               title: (items) => `after ${C.fmt(items[0].parsed.x)}${C.guesses ? " guesses" : ""}`,
               label: (ctx) => {
+                const name = ctx.dataset.label || ctx.dataset._curve || "";
                 const step = ctx.raw?._step;
-                if (!step) return `${ctx.dataset.label}: nothing yet`;
-                return `${ctx.dataset.label}: ${esc(step.label)} done — ` +
+                if (!step) return `${name}: nothing yet`;
+                return `${name}: ${esc(step.label)} done — ` +
                   `${num(step.cumulative)} recovered (${pct(step.cumulative_coverage, 1)}% of goal)`;
               },
             },
@@ -651,7 +785,150 @@ export async function render(mount, route = "") {
           },
         },
       },
-    }));
+    });
+    charts.push(chart);
+    return chart;
+  }
+
+  // Efficiency = the slope of the cumulative curve: new passwords per unit cost.
+  // With `showProfile` off it is one flat step per attack (its total cracks over
+  // its total cost); on, it is the measured within-attack rate from crack_pos —
+  // a faint raw per-bucket line plus a bold rolling average. The Y axis starts
+  // log (see #or-eff-log) so the fall from "cheap early cracks" to "millions of
+  // guesses per crack" in the tail is legible. Returns the chart for the toggles.
+  function drawEfficiency(r, showProfile) {
+    const canvas = resultBox.querySelector("#or-eff");
+    if (!canvas || typeof Chart === "undefined") return null;
+    const C = costCtx(r);
+    const prof = new Map(r.attacks.map((a) => [a.label, a]));
+    // Rebuilding on a profile toggle must preserve the log/linear choice, so the
+    // initial axis is read from the checkbox rather than hard-coded.
+    const logY = resultBox.querySelector("#or-eff-log")?.checked ?? true;
+
+    // Default (profile off): one flat step per attack — its total cracks over its
+    // total cost — as a staircase whose corner points are hoverable.
+    const flatStairs = (o) => {
+      const data = [];
+      let cumStart = 0;
+      for (const s of o.steps) {
+        const cumEnd = C.cum(s);
+        // Zero-gain steps have no rate to plot; null + spanGaps skips them on a
+        // log axis (where 0 has no position) and leaves no stray point on linear.
+        const rate = C.gainRate(s) || null;
+        data.push({ x: cumStart, y: rate, _step: s });
+        data.push({ x: cumEnd, y: rate, _step: s });
+        cumStart = cumEnd;
+      }
+      return data;
+    };
+
+    // Profile on: the measured within-attack rate (raw and rolling-averaged) from
+    // the per-bucket crack_pos derivative; a step with no profile falls back to a
+    // flat segment. `raw` and `smooth` share x positions.
+    const profileRates = (o) => {
+      const raw = [], smooth = [];
+      let cumStart = 0;
+      for (const s of o.steps) {
+        const cumEnd = C.cum(s);
+        const span = C.one(s);
+        const p = usableProfile(prof.get(s.label));
+        if (p && span != null) {
+          const last = p[p.length - 1], w = span / p.length;
+          const rates = [];
+          let prev = 0;
+          for (let j = 0; j < p.length; j++) {
+            rates.push((((p[j] - prev) / last) * s.gain) / w);
+            prev = p[j];
+          }
+          const sm = rollingAvg(rates, EFF_SMOOTH);
+          for (let j = 0; j < p.length; j++) {
+            const x = cumStart + ((j + 0.5) / p.length) * span;
+            raw.push({ x, y: rates[j] || null });
+            smooth.push({ x, y: sm[j] || null });
+          }
+        } else {
+          const rate = C.gainRate(s) || null;
+          raw.push({ x: cumStart, y: rate }, { x: cumEnd, y: rate });
+          smooth.push({ x: cumStart, y: rate }, { x: cumEnd, y: rate });
+        }
+        cumStart = cumEnd;
+      }
+      return { raw, smooth };
+    };
+
+    const datasets = CURVES.filter((c) => r[c.key]).flatMap((c) => {
+      const o = r[c.key];
+      const line = {
+        borderColor: c.color,
+        backgroundColor: c.color,
+        borderWidth: c.key === "best" ? 2.5 : 1.5,
+        borderDash: c.key === "greedy" ? [5, 4] : [],
+        spanGaps: true,
+        tension: 0,
+      };
+      if (!showProfile) {
+        return [{ ...line, label: c.label, data: flatStairs(o), pointRadius: 0, pointHoverRadius: 4 }];
+      }
+      const { raw, smooth } = profileRates(o);
+      // Node markers at each step boundary carry the step summary and are the only
+      // hoverable points; raw and smooth lines are drawn but not hittable.
+      const nodes = o.steps.map((s) => ({ x: C.cum(s), y: C.gainRate(s) || null, _step: s }));
+      return [
+        { ...line, label: "", borderColor: c.color + "55", borderWidth: 1, borderDash: [], data: raw, pointRadius: 0, pointHitRadius: 0 },
+        { ...line, label: c.label, data: smooth, pointRadius: 0, pointHitRadius: 0 },
+        { ...line, label: "", _curve: c.label, data: nodes, showLine: false, pointRadius: 3, pointHoverRadius: 5 },
+      ];
+    });
+
+    const chart = new Chart(canvas, {
+      type: "line",
+      data: { datasets },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        parsing: false,
+        interaction: { mode: "nearest", intersect: false },
+        plugins: {
+          legend: { labels: { color: cssVar("--text-secondary"), usePointStyle: true, filter: (i) => !!i.text } },
+          tooltip: {
+            callbacks: {
+              title: (items) => `after ${C.fmt(items[0].parsed.x)}${C.guesses ? " guesses" : ""}`,
+              label: (ctx) => {
+                const name = ctx.dataset.label || ctx.dataset._curve || "";
+                const step = ctx.raw?._step;
+                if (!step) return name;
+                return `${name}: ${esc(step.label)} — ` +
+                  `${C.rateFmt(C.gainRate(step))} (${num(step.gain)} new)`;
+              },
+            },
+          },
+        },
+        scales: {
+          x: {
+            type: "linear",
+            min: 0,
+            title: { display: true, text: C.xTitle, color: cssVar("--text-secondary") },
+            ticks: { color: cssVar("--text-secondary"), callback: (v) => C.fmt(v) },
+            grid: { color: cssVar("--surface-3") },
+          },
+          y: {
+            // Initial axis follows #or-eff-log (checked = log by default), so a
+            // profile rebuild keeps whatever the user last chose.
+            type: logY ? "logarithmic" : "linear",
+            beginAtZero: !logY,
+            title: {
+              display: true,
+              text: `recovery per ${C.guesses ? "guess" : "second"}`,
+              color: cssVar("--text-secondary"),
+            },
+            ticks: { color: cssVar("--text-secondary"), callback: (v) => C.rateFmt(v) },
+            grid: { color: cssVar("--surface-3") },
+          },
+        },
+      },
+    });
+    charts.push(chart);
+    return chart;
   }
 
   // ── polling ──────────────────────────────────────────────────────────────
@@ -685,6 +962,28 @@ function rate(v) {
   if (v >= 1) return `${v.toFixed(1)}/s`;
   if (v * 60 >= 1) return `${(v * 60).toFixed(v * 60 >= 10 ? 0 : 1)}/min`;
   return `${(v * 3600).toFixed(v * 3600 >= 10 ? 0 : 1)}/h`;
+}
+
+// The attack's measured recovery profile (cumulative clean cracks over 64 even
+// buckets of its keyspace), or null when there is nothing to shape — an
+// `--increment`/multi-step attack, an old result, or an all-zero curve.
+function usableProfile(a) {
+  const p = a && a.recovery_profile;
+  if (!Array.isArray(p) || !p.length) return null;
+  return p[p.length - 1] ? p : null;
+}
+
+// Centred moving average, used to smooth the spiky per-bucket efficiency rate.
+function rollingAvg(values, window) {
+  const half = Math.floor(window / 2);
+  return values.map((_, i) => {
+    let sum = 0, n = 0;
+    for (let k = Math.max(0, i - half); k <= Math.min(values.length - 1, i + half); k++) {
+      sum += values[k];
+      n++;
+    }
+    return n ? sum / n : 0;
+  });
 }
 
 // Compact guess counts, since a real mask is millions to trillions of

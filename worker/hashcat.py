@@ -26,11 +26,20 @@ Behaviours worth knowing before changing anything here:
   · --potfile-disable keeps the attacks independent. With the potfile on,
     hashcat would skip goal entries a previous attack already cracked and the
     second attack would report a near-zero recovery.
-  · --outfile-format 2 writes the plain. hashcat hex-escapes plains it cannot
-    write literally, but does so deterministically from the content, so the
-    same password encodes identically in every attack's outfile and set
-    comparison stays exact. Lines are compared as raw bytes for the same
-    reason — real corpora are not valid UTF-8.
+  · --outfile-format 2,4 writes `plain:crack_pos`. Field 2 (plain) is what the
+    set comparison uses; hashcat hex-escapes plains it cannot write literally,
+    but does so deterministically from the content, so the same password
+    encodes identically in every attack's outfile and set comparison stays
+    exact. Lines are compared as raw bytes for the same reason — real corpora
+    are not valid UTF-8. Field 4 (crack_pos) is hashcat's position for the
+    crack in the attack's keyspace, in the same units as the progress[0] guess
+    counter; it is always the *last* field, so the plain is everything before
+    the final ':'. It feeds the per-attack recovery profile (_recovery_profile)
+    only — never any score. It is a deliberately rough, device-dependent
+    statistic (for a rule attack it is word_pos * rule_count + rule_pos and can
+    differ across GPUs), and hashcat restarts it per sub-keyspace of an
+    --increment mask / multi-file wordlist, so the profile is built only for
+    single-step attacks.
 """
 
 from __future__ import annotations
@@ -52,6 +61,11 @@ from backend.jobs.spec import MODES as MODES_BY_NAME, Attack, JobSpec
 log = logging.getLogger(__name__)
 
 HASH_MODE = "99999"  # Plaintext
+
+# Points in a per-attack recovery profile — cumulative cracks sampled at this
+# many evenly spaced fractions of the attack's keyspace. Fixed and small so the
+# stored result never scales with the recovered-set size.
+PROFILE_BUCKETS = 64
 
 # hashcat exit codes. 0 and 1 are both successful completions.
 EXIT_CRACKED = 0
@@ -89,6 +103,14 @@ class AttackRun:
     # (backend/jobs/ordering.py). Unlike a duration it does not depend on the
     # host, the device, or a warm kernel cache. None if no status line came.
     guesses: int | None = None
+    # Cumulative distinct (clean) cracks at PROFILE_BUCKETS evenly spaced points
+    # across the attack's keyspace — within-attack recovery actually measured,
+    # from crack_pos, rather than assumed uniform. None when it cannot be built:
+    # a multi-step (--increment) attack, no cracks, or an outfile with no
+    # crack_pos (e.g. a result from before this feature). `basis` says what the
+    # x fractions are a fraction of: "guesses" (preferred) or "crackpos".
+    recovery_profile: list[int] | None = None
+    recovery_profile_basis: str | None = None
     log_path: Path | None = None
 
     @property
@@ -125,7 +147,7 @@ def build_argv(
         # test_outfile_check_dir_does_not_leak_between_attacks guards this.
         "--outfile-check-dir", str(_check_dir(outfile.parent)),
         "--outfile", str(outfile),
-        "--outfile-format", "2",   # plain only
+        "--outfile-format", "2,4",  # plain:crack_pos — crack_pos always last
         "--session", session,
         "--status", "--status-json", "--status-timer", "2",
     ]
@@ -180,13 +202,27 @@ def _check_dir(workdir: Path) -> Path:
     return target
 
 
+def _split_crackpos(line: bytes) -> tuple[bytes, int | None]:
+    """Split an `--outfile-format 2,4` line into (plain, crack_pos).
+
+    crack_pos is always the last field, so the plain is everything before the
+    final ':' — correct even when the plain itself contains ':' or is a
+    `$HEX[...]` escape. A line with no trailing integer (an old plain-only
+    outfile, or a plain ending in ':') is returned whole with pos None.
+    """
+    plain, sep, pos = line.rpartition(b":")
+    if sep and pos.isdigit():
+        return plain, int(pos)
+    return line, None
+
+
 def read_recovered(outfile: Path) -> set[bytes]:
     """Distinct recovered plains. Missing file means the attack found nothing —
     hashcat does not create an outfile when there are no cracks."""
     if not outfile.exists():
         return set()
     data = outfile.read_bytes()
-    return {line for line in data.split(b"\n") if line}
+    return {_split_crackpos(line)[0] for line in data.split(b"\n") if line}
 
 
 def _read_lines_ordered(path: Path) -> list[bytes]:
@@ -220,7 +256,9 @@ def _contaminated(
     if not used_debug:
         return set(recovered)
 
-    plains = _read_lines_ordered(outfile)
+    # Outfile lines are `plain:crack_pos`; the debug file is Original-Word only
+    # (--debug-mode 2), so strip crack_pos before pairing them up.
+    plains = [_split_crackpos(line)[0] for line in _read_lines_ordered(outfile)]
     bases = _read_lines_ordered(debug_file)
     if len(plains) != len(bases):
         # Should not happen — both are written per crack. If it does, stay
@@ -234,6 +272,53 @@ def _contaminated(
         return set(recovered)
     derived = {plain for plain, base in zip(plains, bases) if base != plain}
     return set(recovered) - derived
+
+
+def _recovery_profile(
+    outfile: Path, clean: set[bytes], guesses: int | None, multistep: bool
+) -> tuple[list[int] | None, str | None]:
+    """Cumulative clean cracks at PROFILE_BUCKETS points across the keyspace.
+
+    Measures within-attack recovery from crack_pos instead of assuming it is
+    uniform. Returns (None, None) when it cannot be built: a multi-step attack
+    (crack_pos restarts per sub-keyspace, so a single axis is meaningless), no
+    cracks, or an outfile carrying no crack_pos at all.
+
+    The x axis is a fraction of the attack's keyspace; `basis` says of what —
+    the guess total when known (so it lines up with the cost axis), else the
+    largest crack_pos seen. Only cracks still in `clean` count, so the profile
+    matches every other recovered number (contamination already subtracted).
+    """
+    if multistep:
+        return None, None
+
+    positions = [
+        pos
+        for plain, pos in (_split_crackpos(line) for line in _read_lines_ordered(outfile))
+        if pos is not None and plain in clean
+    ]
+    if not positions:
+        return None, None
+
+    if guesses and guesses > 0:
+        denom, basis = guesses, "guesses"
+    else:
+        denom, basis = max(positions), "crackpos"
+    if denom <= 0:
+        return None, None
+
+    profile = [0] * PROFILE_BUCKETS
+    for pos in positions:
+        # Which bucket this crack falls into; clamp a crack_pos past the
+        # denominator (a rough counter can overrun) into the last one.
+        b = min(PROFILE_BUCKETS - 1, int(pos * PROFILE_BUCKETS / denom))
+        profile[b] += 1
+    # Per-bucket counts → cumulative, so profile[-1] is the total clean cracks.
+    running = 0
+    for i, count in enumerate(profile):
+        running += count
+        profile[i] = running
+    return profile, basis
 
 
 def run_attack(
@@ -350,17 +435,26 @@ def run_attack(
         goal_loaded = latest["goal_size"]
 
     recovered = read_recovered(outfile)
+    contaminated = _contaminated(attack, recovered, outfile, debug_file, used_debug)
+    guesses = sum(step_done.values()) if step_done else None
+    # crack_pos restarts per --increment step / wordlist-dir file, so a single
+    # recovery profile only makes sense when the run was a single keyspace.
+    profile, profile_basis = _recovery_profile(
+        outfile, recovered - contaminated, guesses, multistep=len(step_done) > 1
+    )
     return AttackRun(
         label=attack.label,
         argv=argv,
         exit_code=exit_code,
         recovered=recovered,
-        contaminated=_contaminated(attack, recovered, outfile, debug_file, used_debug),
+        contaminated=contaminated,
         goal_loaded=goal_loaded,
         goal_rejected=goal_rejected,
         partial=partial,
         duration_s=duration,
-        guesses=sum(step_done.values()) if step_done else None,
+        guesses=guesses,
+        recovery_profile=profile,
+        recovery_profile_basis=profile_basis,
         log_path=log_path,
     )
 

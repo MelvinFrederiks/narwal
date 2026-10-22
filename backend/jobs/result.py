@@ -144,6 +144,12 @@ class FinalAttackResult(AttackResult):
     # verbatim goal hits were set aside (0 unless suspect).
     suspect: bool
     contaminated: int
+    # Within-attack recovery curve measured from hashcat crack_pos: cumulative
+    # clean cracks at 64 evenly spaced points across the attack's keyspace.
+    # `basis` is "guesses" or "crackpos" (what the x fractions are of). None for
+    # a multi-step (--increment) attack or a result from before this existed.
+    recovery_profile: NotRequired[list[int] | None]
+    recovery_profile_basis: NotRequired[str | None]
 
 
 class FinalJobResult(JobResultBase[FinalAttackResult]):
