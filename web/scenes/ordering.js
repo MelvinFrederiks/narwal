@@ -345,7 +345,6 @@ export async function render(mount, route = "") {
         <div style="font-weight:500;margin:22px 0 8px">
           Top ${r.top.length} sequences
         </div>
-        ${rankingHtml(r)}
 
         <div class="note">
           <b>Score</b> is the area under the recovery curve divided by (total recovered × total
@@ -663,29 +662,6 @@ export async function render(mount, route = "") {
               </td>
               <td style="padding:5px 12px 5px 0;${n}">${num(s.count)}</td>
               <td style="padding:5px 0;${n}">${pct(s.share, 1)}%</td>
-            </tr>`).join("")}
-        </tbody>
-      </table></div>`;
-  }
-
-  function rankingHtml(r) {
-    const n = "text-align:right;font-variant-numeric:tabular-nums";
-    const C = costCtx(r);
-    return `
-      <div style="overflow:auto"><table style="border-collapse:collapse;font-size:12px;min-width:560px">
-        <thead><tr style="color:var(--text-secondary);text-align:left">
-          <th style="padding:4px 12px 4px 0;font-weight:500">#</th>
-          <th style="padding:4px 12px 4px 0;font-weight:500">Sequence</th>
-          <th style="padding:4px 12px 4px 0;font-weight:500;${n}">Half the haul by</th>
-          <th style="padding:4px 0;font-weight:500;${n}">Score</th>
-        </tr></thead>
-        <tbody>
-          ${r.top.map((e, i) => `
-            <tr style="${i === 0 ? "background:var(--surface-2)" : ""}">
-              <td style="padding:5px 12px 5px 0;color:var(--text-tertiary)">${i + 1}</td>
-              <td style="padding:5px 12px 5px 0">${e.order.map(esc).join(" → ")}</td>
-              <td style="padding:5px 12px 5px 0;${n}">${C.fmt(halfOf(e))}${C.guesses ? " guesses" : ""}</td>
-              <td style="padding:5px 0;${n}">${i === 0 ? "<b>" : ""}${pct(e.efficiency, 1)}%${i === 0 ? "</b>" : ""}</td>
             </tr>`).join("")}
         </tbody>
       </table></div>`;
