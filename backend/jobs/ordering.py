@@ -117,6 +117,10 @@ MILESTONES = (0.25, 0.5, 0.75, 0.9, 1.0)
 TOP_K = 20  # orderings returned in full ranking order
 DIST_BINS = 20  # buckets in the score histogram
 MAX_SIGNATURES = 16  # coverage signatures returned, largest first
+# Points in a per-step recovery profile. Mirrors worker/hashcat.py::PROFILE_BUCKETS
+# (the bucket a crack lands in is assigned there); kept as its own constant so
+# this module stays importable without the worker / hashcat.
+PROFILE_BUCKETS = 64
 
 
 class OrderingError(ValueError):
@@ -299,6 +303,51 @@ def describe(
     )
 
 
+def _attach_step_profiles(
+    run: OrderingSingleRun,
+    recovered: dict[str, set[bytes]],
+    crack_buckets: dict[str, dict[bytes, int]],
+    crack_bases: dict[str, str] | None,
+    buckets: int = PROFILE_BUCKETS,
+) -> None:
+    """Set each step's order-aware within-attack recovery profile, in place.
+
+    The uniform-accrual assumption `describe` makes is that an attack's *new*
+    passwords arrive evenly across its run. This measures them instead, from the
+    per-plain crack_pos bucket (worker/hashcat.py::_crack_buckets): walking the
+    steps in order and keeping the running union of everything already recovered,
+    `profile[j]` is the cumulative count of this attack's cracks that fell in
+    bucket ≤ j **and were not already found by an earlier step**.
+
+    That "not already found" is what makes it order-aware — the same attack in a
+    later slot shows only what it uniquely adds there, in the keyspace positions
+    where it adds them. Because a single-step attack's bucket map covers exactly
+    its clean recovered set, `profile[-1]` equals the step's `gain`, so the curve
+    lands on the measured node with no rescaling. A step whose attack has no
+    bucket map (--increment / no crack_pos) gets None and the UI draws it
+    straight, as before.
+    """
+    seen: set[bytes] = set()
+    for step in run["steps"]:
+        label = step["label"]
+        cb = crack_buckets.get(label)
+        if cb is None:
+            step["recovery_profile"] = None
+            step["recovery_profile_basis"] = None
+        else:
+            profile = [0] * buckets
+            for plain, b in cb.items():
+                if plain not in seen:
+                    profile[b] += 1
+            running = 0
+            for i, count in enumerate(profile):
+                running += count
+                profile[i] = running
+            step["recovery_profile"] = profile
+            step["recovery_profile_basis"] = (crack_bases or {}).get(label)
+        seen |= recovered[label]
+
+
 def greedy_order(
     n: int, table: list[int], cost: list[float], first: int | None = None
 ) -> tuple[int, ...]:
@@ -432,6 +481,8 @@ def summarise(
     *,
     guesses: dict[str, int | None] | None = None,
     durations: dict[str, float] | None = None,
+    crack_buckets: dict[str, dict[bytes, int]] | None = None,
+    crack_bases: dict[str, str] | None = None,
 ) -> OrderingResult:
     """Score every ordering of these attacks. The worker's entry point.
 
@@ -439,6 +490,12 @@ def summarise(
     as read back from hashcat's outfile); `guesses` maps the same labels to the
     candidates hashcat tried, and `durations` to measured wall-clock seconds.
     Guesses are what gets ranked against — see `_cost_axis`.
+
+    `crack_buckets` (label → {plain: keyspace bucket}, from
+    worker/hashcat.py::_crack_buckets) is optional; when given, the best, greedy
+    and worst orderings carry an order-aware within-attack recovery profile per
+    step — see `_attach_step_profiles`. `crack_bases` labels each attack's x axis
+    ("guesses"/"crackpos"). Neither affects scoring.
     """
     labels = list(recovered)
     n = len(labels)
@@ -510,8 +567,19 @@ def summarise(
 
     best = detail(best_order)
     greedy_detail = detail(greedy)
+    # If there is only one element, the worst is the best.
+    worst_run = detail(worst[1]) if worst[1] is not None else best
     # How many orderings beat greedy — 0 means the heuristic was optimal here.
     greedy_beaten_by = sum(1 for e in effs if e > greedy_detail["efficiency"] + 1e-12)
+
+    # Order-aware within-attack recovery: measured per-step, only for the three
+    # orderings the UI draws (each is 3·N·PROFILE_BUCKETS ints). Scoring is done
+    # and untouched; this only enriches the step curves. De-dup by identity so a
+    # job with a single ordering (worst_run is best) is not processed twice.
+    if crack_buckets:
+        for run in {id(best): best, id(greedy_detail): greedy_detail,
+                    id(worst_run): worst_run}.values():
+            _attach_step_profiles(run, recovered, crack_buckets, crack_bases)
 
     def per_attack(i: int, label: str) -> OrderingAttackResult:
         found = len(recovered[label])
@@ -561,9 +629,7 @@ def summarise(
         timing_available=dur_list is not None,
         milestone_fractions=list(MILESTONES),
         best=best,
-        worst=detail(worst[1])
-        if worst[1] is not None
-        else best,  # If there is only one element, the worst is the best
+        worst=worst_run,
         greedy={
             **greedy_detail,
             "is_optimal": greedy == best_order or greedy_beaten_by == 0,

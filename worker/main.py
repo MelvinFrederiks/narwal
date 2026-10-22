@@ -199,6 +199,11 @@ def run_job(conn, job: dict) -> FinalJobResult:
             goal_size,
             guesses={r.label: r.guesses for r in runs},
             durations={r.label: r.duration_s for r in runs},
+            # Per-plain keyspace buckets for the order-aware within-attack
+            # recovery profile; only single-step attacks have them. Matches the
+            # clean `recovered` sets above.
+            crack_buckets={r.label: r.crack_buckets for r in runs if r.crack_buckets is not None},
+            crack_bases={r.label: r.recovery_profile_basis for r in runs},
         )
     else:
         result = metrics.summarise(recovered, goal_size)

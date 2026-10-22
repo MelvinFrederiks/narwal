@@ -111,6 +111,11 @@ class AttackRun:
     # x fractions are a fraction of: "guesses" (preferred) or "crackpos".
     recovery_profile: list[int] | None = None
     recovery_profile_basis: str | None = None
+    # Per-plain keyspace bucket (0..PROFILE_BUCKETS-1) behind the profile above.
+    # Transient worker memory — never persisted (it is corpus-scale); the
+    # ordering scorer consumes it to build an order-aware per-step recovery
+    # profile. None under the same conditions as recovery_profile.
+    crack_buckets: dict[bytes, int] | None = None
     log_path: Path | None = None
 
     @property
@@ -274,51 +279,78 @@ def _contaminated(
     return set(recovered) - derived
 
 
-def _recovery_profile(
+def _crack_buckets(
     outfile: Path, clean: set[bytes], guesses: int | None, multistep: bool
-) -> tuple[list[int] | None, str | None]:
-    """Cumulative clean cracks at PROFILE_BUCKETS points across the keyspace.
+) -> tuple[dict[bytes, int] | None, str | None]:
+    """Map each clean crack to its keyspace bucket (0..PROFILE_BUCKETS-1).
 
-    Measures within-attack recovery from crack_pos instead of assuming it is
-    uniform. Returns (None, None) when it cannot be built: a multi-step attack
-    (crack_pos restarts per sub-keyspace, so a single axis is meaningless), no
-    cracks, or an outfile carrying no crack_pos at all.
+    The per-plain identity behind the recovery profile: measures *where* in the
+    attack's keyspace each password was found, from crack_pos. The ordering
+    scorer uses it to compute order-aware marginal recovery (which of these were
+    new at a given position), which a collapsed count cannot express — see
+    backend/jobs/ordering.py::_attach_step_profiles.
 
-    The x axis is a fraction of the attack's keyspace; `basis` says of what —
-    the guess total when known (so it lines up with the cost axis), else the
-    largest crack_pos seen. Only cracks still in `clean` count, so the profile
-    matches every other recovered number (contamination already subtracted).
+    Returns (None, None) when it cannot be built: a multi-step attack (crack_pos
+    restarts per sub-keyspace, so a single axis is meaningless), no cracks, or an
+    outfile carrying no crack_pos at all.
+
+    The x axis is a fraction of the attack's keyspace; `basis` says of what — the
+    guess total when known (so it lines up with the cost axis), else the largest
+    crack_pos seen. Only cracks still in `clean` count, so the profile matches
+    every other recovered number (contamination already subtracted).
     """
     if multistep:
         return None, None
 
-    positions = [
-        pos
+    pairs = [
+        (plain, pos)
         for plain, pos in (_split_crackpos(line) for line in _read_lines_ordered(outfile))
         if pos is not None and plain in clean
     ]
-    if not positions:
+    if not pairs:
         return None, None
 
     if guesses and guesses > 0:
         denom, basis = guesses, "guesses"
     else:
-        denom, basis = max(positions), "crackpos"
+        denom, basis = max(pos for _, pos in pairs), "crackpos"
     if denom <= 0:
         return None, None
 
+    # Which bucket each crack falls into; clamp a crack_pos past the denominator
+    # (a rough counter can overrun) into the last one.
+    buckets = {
+        plain: min(PROFILE_BUCKETS - 1, int(pos * PROFILE_BUCKETS / denom))
+        for plain, pos in pairs
+    }
+    return buckets, basis
+
+
+def _cumulative_profile(buckets: dict[bytes, int]) -> list[int]:
+    """Per-plain buckets → cumulative counts, so profile[-1] is the total."""
     profile = [0] * PROFILE_BUCKETS
-    for pos in positions:
-        # Which bucket this crack falls into; clamp a crack_pos past the
-        # denominator (a rough counter can overrun) into the last one.
-        b = min(PROFILE_BUCKETS - 1, int(pos * PROFILE_BUCKETS / denom))
+    for b in buckets.values():
         profile[b] += 1
-    # Per-bucket counts → cumulative, so profile[-1] is the total clean cracks.
     running = 0
     for i, count in enumerate(profile):
         running += count
         profile[i] = running
-    return profile, basis
+    return profile
+
+
+def _recovery_profile(
+    outfile: Path, clean: set[bytes], guesses: int | None, multistep: bool
+) -> tuple[list[int] | None, str | None]:
+    """Cumulative clean cracks at PROFILE_BUCKETS points across the keyspace.
+
+    The per-attack standalone profile (order-independent). A thin wrapper over
+    `_crack_buckets` kept for callers and tests that want the collapsed form;
+    the ordering scorer uses the bucket map directly for its order-aware version.
+    """
+    buckets, basis = _crack_buckets(outfile, clean, guesses, multistep)
+    if buckets is None:
+        return None, None
+    return _cumulative_profile(buckets), basis
 
 
 def run_attack(
@@ -438,10 +470,12 @@ def run_attack(
     contaminated = _contaminated(attack, recovered, outfile, debug_file, used_debug)
     guesses = sum(step_done.values()) if step_done else None
     # crack_pos restarts per --increment step / wordlist-dir file, so a single
-    # recovery profile only makes sense when the run was a single keyspace.
-    profile, profile_basis = _recovery_profile(
+    # recovery profile only makes sense when the run was a single keyspace. Build
+    # the per-plain bucket map once; the collapsed profile is derived from it.
+    buckets, profile_basis = _crack_buckets(
         outfile, recovered - contaminated, guesses, multistep=len(step_done) > 1
     )
+    profile = _cumulative_profile(buckets) if buckets is not None else None
     return AttackRun(
         label=attack.label,
         argv=argv,
@@ -455,6 +489,7 @@ def run_attack(
         guesses=guesses,
         recovery_profile=profile,
         recovery_profile_basis=profile_basis,
+        crack_buckets=buckets,
         log_path=log_path,
     )
 

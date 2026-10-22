@@ -190,12 +190,11 @@ export async function render(mount, route = "") {
     const C = costCtx(r);
     const best = r.best;
     const worst = r.worst;
-    // Per-attack lookup for the recovery-profile overlay, keyed by the label the
-    // ordering steps carry. `hasProfile` gates the two "show recovery profile"
-    // checkboxes — an old result or an all-`--increment` job has none.
-    const profiles = new Map(r.attacks.map((a) => [a.label, a]));
-    const hasProfile = r.attacks.some(
-      (a) => Array.isArray(a.recovery_profile) && a.recovery_profile.length
+    // `hasProfile` gates the two "show recovery profile" checkboxes: true when any
+    // drawn ordering carries a per-step recovery profile. An old result or an
+    // all-`--increment` job has none.
+    const hasProfile = [r.best, r.greedy, r.worst].some(
+      (o) => o?.steps?.some((s) => Array.isArray(s.recovery_profile) && s.recovery_profile.length)
     );
     // Cost to half the haul, best against worst: the single number that says
     // whether reordering is worth anybody's attention.
@@ -257,9 +256,12 @@ export async function render(mount, route = "") {
           Each marker is the end of one attack${hasProfile ? "" : ", and the markers are measured"}.
           ${hasProfile
             ? `With <b>show recovery profile</b> off, recovery within an attack is drawn as a straight
-               line (the one modelling assumption); on, the segment follows the <b>measured</b> crack_pos
-               shape — scaled so its endpoints stay on the measured markers, so only the curve between
-               them changes. An <code>--increment</code> attack has no single profile and stays straight.`
+               line (the one modelling assumption); on, the segment follows the <b>measured</b> recovery
+               from hashcat crack_pos — order-aware, counting only the passwords each attack adds that
+               earlier attacks had not already found, so a run that mostly duplicates earlier ones shows
+               a flat-then-rising curve. The only assumption left is uniform recovery within a 1/64
+               slice of the keyspace; crack_pos is rough and device-dependent, and an
+               <code>--increment</code> attack has no single profile and stays straight.`
             : `Within an attack recovery is drawn as a straight line, because hashcat reports how many
                goal entries an attack found and ${
                  C.guesses ? "how many guesses it made but not which entry it found at which guess"
@@ -287,10 +289,11 @@ export async function render(mount, route = "") {
           The slope of the curve above, drawn directly: how many new passwords each ${
             C.guesses ? "guess buys" : "second buys"
           }. ${hasProfile
-            ? `With <b>show recovery profile</b> off, each attack is one flat step (its total cracks over
+            ? `With <b>show recovery profile</b> off, each attack is one flat step (its new cracks over
                its total ${C.guesses ? "guesses" : "runtime"}). On, the within-attack rate is drawn from
-               hashcat crack_pos — the faint line is the raw per-bucket rate (rough and device-dependent),
-               the bold line a rolling average over ${EFF_SMOOTH} buckets.`
+               hashcat crack_pos — order-aware, so it is the rate of <i>new</i> passwords at each point
+               in the run; the faint line is the raw per-bucket rate (rough and device-dependent), the
+               bold line a rolling average over ${EFF_SMOOTH} buckets.`
             : `Each attack is a flat step — hashcat reports its total cracks and ${
                 C.guesses ? "guesses" : "runtime"
               }, not which crack landed when — so the rate is constant within an attack and drops at
@@ -692,28 +695,27 @@ export async function render(mount, route = "") {
     const canvas = resultBox.querySelector("#or-curve");
     if (!canvas || typeof Chart === "undefined") return null;
     const C = costCtx(r);
-    const prof = new Map(r.attacks.map((a) => [a.label, a]));
 
     // Node markers: (0, 0) then one point per finished attack — always measured,
     // always the only hoverable points (see the caption's hover note).
     const nodesOf = (o) =>
       [{ x: 0, y: 0 }].concat(o.steps.map((s) => ({ x: C.cum(s), y: s.cumulative, _step: s })));
 
-    // The dense within-attack path. Each step either follows the measured
-    // crack_pos shape (scaled so its endpoints stay on the measured nodes) or,
-    // with no profile, draws the straight segment to its node.
+    // The dense within-attack path. Each step follows its measured order-aware
+    // profile (cumulative NEW cracks, whose last value equals the step's gain, so
+    // the curve lands on the measured node with no rescaling) or, with no profile,
+    // draws the straight segment to its node.
     const profileOf = (o) => {
       const data = [{ x: 0, y: 0 }];
       let cumStart = 0;
       for (const s of o.steps) {
         const cumEnd = C.cum(s);
         const span = C.one(s);
-        const p = usableProfile(prof.get(s.label));
+        const p = usableProfile(s.recovery_profile);
         if (p && span != null) {
-          const last = p[p.length - 1];
           const cumBefore = s.cumulative - s.gain;
           for (let j = 0; j < p.length; j++) {
-            data.push({ x: cumStart + ((j + 1) / p.length) * span, y: cumBefore + (p[j] / last) * s.gain });
+            data.push({ x: cumStart + ((j + 1) / p.length) * span, y: cumBefore + p[j] });
           }
         } else {
           data.push({ x: cumEnd, y: s.cumulative });
@@ -800,7 +802,6 @@ export async function render(mount, route = "") {
     const canvas = resultBox.querySelector("#or-eff");
     if (!canvas || typeof Chart === "undefined") return null;
     const C = costCtx(r);
-    const prof = new Map(r.attacks.map((a) => [a.label, a]));
     // Rebuilding on a profile toggle must preserve the log/linear choice, so the
     // initial axis is read from the checkbox rather than hard-coded.
     const logY = resultBox.querySelector("#or-eff-log")?.checked ?? true;
@@ -823,21 +824,22 @@ export async function render(mount, route = "") {
     };
 
     // Profile on: the measured within-attack rate (raw and rolling-averaged) from
-    // the per-bucket crack_pos derivative; a step with no profile falls back to a
-    // flat segment. `raw` and `smooth` share x positions.
+    // the per-bucket order-aware crack_pos derivative; a step with no profile
+    // falls back to a flat segment. `raw` and `smooth` share x positions.
     const profileRates = (o) => {
       const raw = [], smooth = [];
       let cumStart = 0;
       for (const s of o.steps) {
         const cumEnd = C.cum(s);
         const span = C.one(s);
-        const p = usableProfile(prof.get(s.label));
+        const p = usableProfile(s.recovery_profile);
         if (p && span != null) {
-          const last = p[p.length - 1], w = span / p.length;
+          const w = span / p.length;
           const rates = [];
           let prev = 0;
           for (let j = 0; j < p.length; j++) {
-            rates.push((((p[j] - prev) / last) * s.gain) / w);
+            // p is cumulative NEW cracks, so p[j]-prev is this bucket's new cracks.
+            rates.push((p[j] - prev) / w);
             prev = p[j];
           }
           const sm = rollingAvg(rates, EFF_SMOOTH);
@@ -964,11 +966,10 @@ function rate(v) {
   return `${(v * 3600).toFixed(v * 3600 >= 10 ? 0 : 1)}/h`;
 }
 
-// The attack's measured recovery profile (cumulative clean cracks over 64 even
-// buckets of its keyspace), or null when there is nothing to shape — an
+// A step's order-aware recovery profile (cumulative NEW cracks over 64 even
+// buckets of the attack's keyspace), or null when there is nothing to shape — an
 // `--increment`/multi-step attack, an old result, or an all-zero curve.
-function usableProfile(a) {
-  const p = a && a.recovery_profile;
+function usableProfile(p) {
   if (!Array.isArray(p) || !p.length) return null;
   return p[p.length - 1] ? p : null;
 }

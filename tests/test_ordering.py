@@ -408,3 +408,76 @@ def test_score_matches_a_brute_force_reference_implementation():
 
     assert r["best"]["auc"] == pytest.approx(reference(best_ref))
     assert r["best"]["auc"] == pytest.approx(reference(tuple(r["best"]["order"])))
+
+
+# ── order-aware within-attack recovery profiles ──────────────────────────────
+
+def test_attach_step_profiles_is_order_aware():
+    """The same attack's within-attack curve depends on what ran before it.
+
+    Attack b finds p3,p4 at the start of its keyspace (bucket 0) and p5,p6 at the
+    end (last bucket). Run first, all four are new, so its profile is front-loaded.
+    Run after a (which already found p3,p4), only the late p5,p6 are new, so the
+    profile is back-loaded — the whole point of computing it per ordering.
+    """
+    last = ordering.PROFILE_BUCKETS - 1
+    recovered = {"a": b("p1", "p2", "p3", "p4"), "b": b("p3", "p4", "p5", "p6")}
+    crack_buckets = {
+        "a": {b"p1": 0, b"p2": 0, b"p3": 0, b"p4": 0},
+        "b": {b"p3": 0, b"p4": 0, b"p5": last, b"p6": last},
+    }
+
+    b_first = {"steps": [
+        {"label": "b", "gain": 4, "cumulative": 4},
+        {"label": "a", "gain": 2, "cumulative": 6},
+    ]}
+    ordering._attach_step_profiles(b_first, recovered, crack_buckets, None)
+    bp = b_first["steps"][0]["recovery_profile"]
+    assert bp[0] == 2 and bp[-1] == 4          # front-loaded: 2 of 4 new in bucket 0
+
+    a_first = {"steps": [
+        {"label": "a", "gain": 4, "cumulative": 4},
+        {"label": "b", "gain": 2, "cumulative": 6},
+    ]}
+    ordering._attach_step_profiles(a_first, recovered, crack_buckets, None)
+    bp2 = a_first["steps"][1]["recovery_profile"]
+    assert bp2[0] == 0 and bp2[-2] == 0 and bp2[-1] == 2   # back-loaded: both new at the end
+
+
+def test_attach_step_profiles_total_equals_gain_and_handles_missing():
+    recovered = {"a": b("p1", "p2"), "b": b("p2", "p3")}
+    # Only a has a bucket map; b's step must come out None.
+    crack_buckets = {"a": {b"p1": 0, b"p2": 5}}
+    run = {"steps": [
+        {"label": "a", "gain": 2, "cumulative": 2},
+        {"label": "b", "gain": 1, "cumulative": 3},
+    ]}
+    ordering._attach_step_profiles(run, recovered, crack_buckets, {"a": "guesses"})
+    assert run["steps"][0]["recovery_profile"][-1] == run["steps"][0]["gain"]
+    assert run["steps"][0]["recovery_profile_basis"] == "guesses"
+    assert run["steps"][1]["recovery_profile"] is None
+    assert run["steps"][1]["recovery_profile_basis"] is None
+
+
+def test_summarise_attaches_profiles_to_displayed_orderings():
+    recovered = {"a": b("p1", "p2", "p3"), "b": b("p3", "p4"), "c": b("p5")}
+    crack_buckets = {
+        "a": {b"p1": 0, b"p2": 1, b"p3": 2},
+        "b": {b"p3": 0, b"p4": 10},
+        "c": {b"p5": 0},
+    }
+    guesses = {"a": 100, "b": 100, "c": 100}
+    r = ordering.summarise(recovered, 5, guesses=guesses, crack_buckets=crack_buckets)
+
+    for run in (r["best"], r["worst"], r["greedy"]):
+        for step in run["steps"]:
+            prof = step["recovery_profile"]
+            assert prof is not None
+            assert prof == sorted(prof)               # non-decreasing
+            assert prof[-1] == step["gain"]           # total new == measured gain
+
+
+def test_summarise_without_crack_buckets_leaves_profiles_absent():
+    recovered = {"a": b("p1", "p2"), "b": b("p2", "p3")}
+    r = ordering.summarise(recovered, 3, guesses={"a": 10, "b": 10})
+    assert all("recovery_profile" not in s for s in r["best"]["steps"])

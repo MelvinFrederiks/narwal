@@ -104,3 +104,30 @@ def test_profile_clamps_position_past_denominator(tmp_path):
     prof, _ = hc._recovery_profile(out, {b"a"}, guesses=1000, multistep=False)
     assert prof[-1] == 1
     assert prof[-2] == 0
+
+
+# ── _crack_buckets ───────────────────────────────────────────────────────────
+
+def test_crack_buckets_maps_each_clean_plain_to_its_bucket(tmp_path):
+    # Two cracks at opposite ends of the keyspace, plus a contaminated one that
+    # is absent from `clean` and so excluded from the map.
+    k = hc.PROFILE_BUCKETS
+    out = tmp_path / "a.out"
+    _write(out, [b"early:0", b"drop:500", b"late:999"])
+    buckets, basis = hc._crack_buckets(out, {b"early", b"late"}, guesses=1000, multistep=False)
+    assert basis == "guesses"
+    assert buckets == {b"early": 0, b"late": k - 1}
+    # The collapsed profile is exactly the cumulative of these buckets.
+    assert hc._cumulative_profile(buckets) == hc._recovery_profile(
+        out, {b"early", b"late"}, guesses=1000, multistep=False
+    )[0]
+
+
+def test_crack_buckets_none_for_multistep_empty_and_no_crackpos(tmp_path):
+    out = tmp_path / "a.out"
+    _write(out, [b"a:1", b"b:2"])
+    assert hc._crack_buckets(out, {b"a", b"b"}, guesses=10, multistep=True) == (None, None)
+    assert hc._crack_buckets(out, set(), guesses=10, multistep=False) == (None, None)
+    plain_only = tmp_path / "b.out"
+    _write(plain_only, [b"a", b"b"])
+    assert hc._crack_buckets(plain_only, {b"a", b"b"}, guesses=10, multistep=False) == (None, None)

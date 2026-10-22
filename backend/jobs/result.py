@@ -85,6 +85,15 @@ class OrderingStep(TypedDict):
     cumulative: int
     cumulative_coverage: float
     cumulative_share: float
+    # Order-aware within-attack recovery: cumulative count of this attack's NEW
+    # cracks (not already found by an earlier step) at 64 evenly spaced points
+    # across its keyspace, measured from crack_pos. The last value equals `gain`,
+    # so the UI draws it between this step's measured endpoints without rescaling.
+    # Set only on the best/greedy/worst runs; None for an --increment/multi-step
+    # attack or a result from before this existed. `basis` is "guesses"/"crackpos"
+    # (what the x fractions are of). See backend/jobs/ordering.py.
+    recovery_profile: NotRequired[list[int] | None]
+    recovery_profile_basis: NotRequired[str | None]
 
 
 # Info on the simulation of one specific ordering run
