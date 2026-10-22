@@ -765,6 +765,7 @@ export async function render(mount, route = "") {
             title: { display: true, text: "passwords recovered", color: cssVar("--text-secondary") },
             ticks: { color: cssVar("--text-secondary"), callback: (v) => num(v) },
             grid: { color: cssVar("--surface-3") },
+            afterFit: fixYAxisWidth,
           },
         },
       },
@@ -908,8 +909,16 @@ export async function render(mount, route = "") {
               text: `recovery per ${C.guesses ? "guess" : "second"}`,
               color: cssVar("--text-secondary"),
             },
-            ticks: { color: cssVar("--text-secondary"), callback: (v) => C.rateFmt(v) },
+            // Compact ticks ("1/457K") — the axis title already says "per guess",
+            // and the long "1 per 457K guesses" form is what widened this axis.
+            ticks: {
+              color: cssVar("--text-secondary"),
+              callback: (v) => (C.guesses && v > 0 && v < 1)
+                ? `1/${guessFmt(Math.round(1 / v))}`
+                : C.rateFmt(v),
+            },
             grid: { color: cssVar("--surface-3") },
+            afterFit: fixYAxisWidth,
           },
         },
       },
@@ -934,6 +943,15 @@ export async function render(mount, route = "") {
       poll();
     }, POLL_MS);
   }
+}
+
+// Both charts sit one above the other and share an x axis, so their plot areas
+// must start at the same left edge. Chart.js sizes each y axis to its own tick
+// labels, which would shift one chart's edge; pinning both to one width keeps
+// them aligned whatever the labels say.
+const Y_AXIS_WIDTH = 84;
+function fixYAxisWidth(axis) {
+  axis.width = Y_AXIS_WIDTH;
 }
 
 function cssVar(name) {
