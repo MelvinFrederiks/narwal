@@ -4,7 +4,10 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Optional
 
-import hashtopolis
+try:
+    import hashtopolis
+except Exception:  # not installed or unconfigured; only the API-backed functions need it
+    hashtopolis = None
 from fastapi import HTTPException
 
 from backend.jobs.spec import MODES, Attack

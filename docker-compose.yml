@@ -16,6 +16,10 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      # Local checkout of the python-hashtopolis client (not on PyPI) — see
+      # .env.example. The fallback is an empty directory, which skips the install.
+      additional_contexts:
+        hashtopolis-src: ${NARWAL_HASHTOPOLIS_SRC:-./docker/no-hashtopolis}
     image: narwal:dev
     container_name: narwal
     ports:
@@ -38,6 +42,11 @@ services:
       # NARWAL_RUNS_HOST_DIR only exists so the e2e scripts under scripts/ can
       # point at a throwaway directory; leave it unset in normal use.
       - ${NARWAL_RUNS_HOST_DIR:-./runs}:/runs
+      # The python-hashtopolis client reads its endpoint + API key from
+      # hashtopolis-test.yaml in the CWD, which is /app. Mounted read-only and
+      # never baked into the image. The fallback is an empty file (not a missing
+      # path, which Docker would turn into a directory) — the picker then stays off.
+      - ${NARWAL_HASHTOPOLIS_CONFIG:-./docker/no-hashtopolis/empty.yaml}:/app/hashtopolis-test.yaml:ro
     environment:
       - NARWAL_WORDLISTS_DIR=/mnt/wordlists
       - NARWAL_WORDLISTS_REGEX=${NARWAL_WORDLISTS_REGEX:-}

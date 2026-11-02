@@ -15,6 +15,17 @@ WORKDIR /app
 COPY pyproject.toml ./
 RUN pip install --no-cache-dir fastapi "uvicorn[standard]"
 
+# The experimental python-hashtopolis client is not on PyPI, so it comes from a
+# local checkout passed in as the `hashtopolis-src` build context (compose sets
+# it from NARWAL_HASHTOPOLIS_SRC). Unset, that context is an empty directory and
+# the install is skipped: the app runs without the Hashtopolis attack picker.
+# The client reads hashtopolis-test.yaml from its CWD (/app) — compose mounts it.
+COPY --from=hashtopolis-src . /tmp/hashtopolis
+RUN if [ -f /tmp/hashtopolis/pyproject.toml ] || [ -f /tmp/hashtopolis/setup.py ]; then \
+      pip install --no-cache-dir /tmp/hashtopolis; \
+    fi \
+ && rm -rf /tmp/hashtopolis
+
 COPY backend ./backend
 COPY web ./web
 

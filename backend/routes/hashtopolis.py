@@ -8,12 +8,15 @@ rules roots, which is what the form's inputs and job specs use.
 
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, HTTPException
 
 from .. import config
 from ..hashtopolis_bridge import Supertask, get_attacks, get_supertask_list
 from ..jobs.spec import Attack
 
+log = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/hashtopolis", tags=["hashtopolis"])
 
 
@@ -42,7 +45,8 @@ def list_supertasks():
     # the scene just omits the picker.
     try:
         supertasks = get_supertask_list()
-    except Exception:
+    except Exception as err:
+        log.warning("Hashtopolis unavailable, attack picker off: %r", err)
         return {"enabled": False, "supertasks": []}
     return {
         "enabled": True,

@@ -45,8 +45,8 @@ app.add_middleware(
 routers = [wordlists.router, rules.router, jobs.router]
 try:
     from .routes import hashtopolis
-except ImportError:  # the hashtopolis client isn't installed: no attack picker
-    logging.getLogger(__name__).info("hashtopolis client not installed; picker disabled")
+except Exception as err:  # not installed, or its hashtopolis-test.yaml is missing/bad
+    logging.getLogger(__name__).warning("Hashtopolis attack picker disabled: %r", err)
 else:
     routers.append(hashtopolis.router)
 for router in routers:
