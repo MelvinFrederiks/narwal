@@ -42,7 +42,14 @@ app.add_middleware(
 )
 
 # Add `<module>.router` entries here as endpoints are introduced.
-for router in (wordlists.router, rules.router, jobs.router):
+routers = [wordlists.router, rules.router, jobs.router]
+try:
+    from .routes import hashtopolis
+except ImportError:  # the hashtopolis client isn't installed: no attack picker
+    logging.getLogger(__name__).info("hashtopolis client not installed; picker disabled")
+else:
+    routers.append(hashtopolis.router)
+for router in routers:
     app.include_router(router)
 
 

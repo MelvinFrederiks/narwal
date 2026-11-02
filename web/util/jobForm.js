@@ -54,10 +54,14 @@ export function maskCharsetRefs(mask) {
 // values are mirrored into state on every keystroke rather than read at submit
 // time — a re-render would otherwise lose whatever had been typed.
 //
+// `picker`, if given, is `{ supertasks: [{ id, name }], load(id) }`: a searchable
+// box over the Attacks list that replaces the attacks with whatever `load`
+// resolves to (`{ attacks, unresolved }`). Nothing is queued by picking.
+//
 // `onSubmit({ name, goal, maxRuntime, attacks })` should throw an Error whose
 // message is worth showing; it gets rendered under the buttons.
 export function attackBuilder({
-  mount, cfg, files, prefix, attacks, maxAttacks, colors = [], hint,
+  mount, cfg, files, prefix, attacks, maxAttacks, colors = [], hint, picker,
   submitLabel = "Queue analysis", onSubmit,
 }) {
   const state = {
@@ -68,6 +72,9 @@ export function attackBuilder({
     // removing an attack triggers.
     derived: [], _derivedDraft: "",
     attacks, submitting: false, error: "",
+    // Picker state: the half-typed supertask name, and what the last load
+    // could not resolve (files hashtopolis names that this server lacks).
+    _pickerDraft: "", pickerBusy: false, warnings: [],
   };
   const id = (suffix) => `${prefix}-${suffix}`;
   const q = (suffix) => mount.querySelector(`#${id(suffix)}`);
@@ -104,7 +111,15 @@ export function attackBuilder({
         </span>
       </div>
 
-      <div style="font-weight:500;margin-bottom:8px">Attacks</div>
+      <div style="display:flex;gap:12px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
+        <span style="font-weight:500">Attacks</span>
+        ${picker?.supertasks.length ? pickerHtml() : ""}
+      </div>
+      ${state.warnings.length ? `
+        <div class="card warning" style="margin-bottom:10px">
+          <b>Could not find ${state.warnings.length === 1 ? "this file" : "these files"} on the server:</b>
+          ${state.warnings.map((w) => `<code style="margin-left:6px">${esc(w)}</code>`).join("")}
+        </div>` : ""}
       <div class="card-list" id="${id("attacks")}">
         ${state.attacks.map((a, i) => attackHtml(a, i)).join("")}
       </div>
@@ -119,6 +134,48 @@ export function attackBuilder({
       ${state.error ? `<div class="card danger" style="margin-top:12px">${esc(state.error)}</div>` : ""}
     `;
     wire();
+  }
+
+  function pickerHtml() {
+    return `
+      <span style="margin-left:auto;display:flex;gap:6px;align-items:center;font-size:12px">
+        <span style="color:var(--text-tertiary);white-space:nowrap">load from Hashtopolis supertask:</span>
+        <input type="text" id="${id("picker")}" list="${id("supertasks")}" placeholder="search…"
+               style="min-width:220px;padding:4px 6px" value="${esc(state._pickerDraft)}"
+               ${state.pickerBusy ? "disabled" : ""}/>
+        <datalist id="${id("supertasks")}">
+          ${picker.supertasks.map((s) => `<option value="${esc(s.name)}">`).join("")}
+        </datalist>
+        <button id="${id("picker-load")}" style="padding:4px 10px" ${state.pickerBusy ? "disabled" : ""}>
+          ${state.pickerBusy ? "loading…" : "Load"}
+        </button>
+      </span>`;
+  }
+
+  async function loadSupertask() {
+    const name = q("picker").value.trim();
+    const match = picker.supertasks.find((s) => s.name === name);
+    if (!match) return;
+    readTop();
+    state._pickerDraft = name;
+    state.pickerBusy = true;
+    state.error = "";
+    render();
+    try {
+      const { attacks: loaded, unresolved } = await picker.load(match.id);
+      const next = loaded.slice(0, maxAttacks).map((a) => ({ ...emptyAttack(), ...a }));
+      while (next.length < 2) next.push(emptyAttack());
+      state.attacks = next;
+      state.warnings = [...new Set(unresolved)];
+      if (loaded.length > maxAttacks) {
+        state.warnings.push(`(${loaded.length - maxAttacks} attack(s) beyond the limit of ${maxAttacks} were not loaded)`);
+      }
+    } catch (err) {
+      state.error = err.message;
+    } finally {
+      state.pickerBusy = false;
+      render();
+    }
   }
 
   function attackHtml(a, i) {
@@ -276,6 +333,15 @@ export function attackBuilder({
           render();
         });
       }
+    }
+
+    if (picker?.supertasks.length) {
+      const input = q("picker");
+      input.addEventListener("input", () => { state._pickerDraft = input.value; });
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") { e.preventDefault(); loadSupertask(); }
+      });
+      q("picker-load").addEventListener("click", loadSupertask);
     }
 
     q("add").addEventListener("click", () => {

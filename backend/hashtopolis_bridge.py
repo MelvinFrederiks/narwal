@@ -1,6 +1,6 @@
 import re
 import shlex
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Optional
 
@@ -8,6 +8,7 @@ import hashtopolis
 from fastapi import HTTPException
 
 from backend.jobs.spec import MODES, Attack
+from backend.routes.rules import _resolve as _resolve_rule
 from backend.routes.wordlists import _resolve
 
 
@@ -90,7 +91,7 @@ def _tokenize_command(command: str) -> tuple[int, list[tuple[str, str]], list[Pa
             except ValueError:
                 raise ValueError(f"invalid attack mode {value!r} in {command!r}") from None
         elif flag == "r":
-            rules.append(find_file(value))
+            rules.append(find_file(value, check=False))
         elif flag in "1234":
             charsets.append((flag, value))
         # -w: value consumed and ignored
@@ -115,13 +116,13 @@ def parse_pretask(pretask: Pretask) -> Attack:
             f"got {len(positionals)} in {pretask.command!r}"
         )
     if mode == 0:
-        wordlist = find_file(positionals[0])
+        wordlist = find_file(positionals[0], check=False)
     elif mode == 3:
         mask = positionals[0]
     elif mode == 6:
-        wordlist, mask = find_file(positionals[0]), positionals[1]
+        wordlist, mask = find_file(positionals[0], check=False), positionals[1]
     else:  # 7
-        mask, wordlist = positionals[0], find_file(positionals[1])
+        mask, wordlist = positionals[0], find_file(positionals[1], check=False)
 
     return Attack(
         label=pretask.name,
@@ -134,31 +135,53 @@ def parse_pretask(pretask: Pretask) -> Attack:
     )
 
 
-def find_file(file: str, check: bool = True) -> Optional[Path]:
-    # Finds the best match for file, check versioned dicts.
+def find_file(file: str, check: bool = True, rule: bool = False) -> Optional[Path]:
+    # Finds the best match for file, check versioned dicts. With rule=True the file is
+    # looked up in the rules directory instead of the wordlist library.
     # This function can be expanded to fit your particular setup, here it is used
     # because there are differences between hashtopolis' file paths and those of corpse.
     if not check:
-        # For testing purposes, if check is Flase, return the path verbatim.
+        # For testing purposes, if check is False, return the path verbatim.
         return Path(file)
-    # Otherwise: find a file which exists.
-    try:
-        # If the file resolves directly, we are done
-        return _resolve(file)
-    except HTTPException:
-        pass
+    resolve = _resolve_rule if rule else _resolve
+    candidates = [file]
     # Otherwise, try a versioned name (wordlist.version.dict)
     re_match = re.search(r"^(\w+)\.\d+\.dict", file)
     if re_match:
+        candidates.append(re_match.group(1) + ".dict")
+    for candidate in candidates:
         try:
-            return _resolve(re_match.group(1) + ".dict")
+            path = resolve(candidate)
         except HTTPException:
-            pass
+            continue
+        # _resolve only guards against escaping the root, not against missing files.
+        if path.is_file():
+            return path
     return None
 
 
-def get_attacks(supertask: Supertask) -> list[Attack]:
+def resolve_attack(attack: Attack, unresolved: list[str] | None = None) -> Attack:
+    # parse_pretask keeps file names verbatim; this maps them onto files that exist here.
+    # A file that cannot be found becomes None (wordlist) or a None entry (rules), and its
+    # original name is appended to `unresolved`, since the Attack no longer carries it.
+    def lookup(name: Path | None, rule: bool) -> Path | None:
+        if name is None:
+            return None
+        found = find_file(str(name), rule=rule)
+        if found is None and unresolved is not None:
+            unresolved.append(str(name))
+        return found
+
+    return replace(
+        attack,
+        wordlist=lookup(attack.wordlist, rule=False),
+        rules=tuple(lookup(rule, rule=True) for rule in attack.rules),
+    )
+
+
+def get_attacks(supertask: Supertask, unresolved: list[str] | None = None) -> list[Attack]:
     # Takes as input a supertask (without prefetched pretasks), and outputs a list of
-    # narwal-compatible attacks.
+    # narwal-compatible attacks. Names of files that could not be found are added to
+    # `unresolved` if given.
     supertask = get_supertask_pretasks(supertask)
-    return [parse_pretask(pretask) for pretask in supertask.pretasks]
+    return [resolve_attack(parse_pretask(pretask), unresolved) for pretask in supertask.pretasks]

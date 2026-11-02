@@ -29,7 +29,7 @@
 //
 // Routing: `#ordering` is the builder, `#ordering/<job-id>` shows one result.
 
-import { listServerFiles, listRuleFiles } from "../util/serverFiles.js";
+import { listServerFiles, listRuleFiles, listSupertasks, fetchSupertaskAttacks } from "../util/serverFiles.js";
 import {
   MODE_LABELS, attackBuilder, attacksToSpec, emptyAttack, jobList,
   noLibraryHtml, progressText, duration, esc, num, pct,
@@ -92,13 +92,15 @@ export async function render(mount, route = "") {
   let cfg = { enabled: false, rules: [], max_ordering_attacks: 8, max_rules: 4 };
   let files = [];
   let rules = [];
+  let supertasks = [];
 
   try {
-    [cfg, files, rules] = await Promise.all([
+    [cfg, files, rules, supertasks] = await Promise.all([
       fetch("/api/jobs/config").then((r) => r.json()),
       listServerFiles(".dict,.masks,.txt"),
       listRuleFiles(".rule"),
       // List only relevant file types
+      listSupertasks(),
     ]);
   } catch (err) {
     setupBox.innerHTML = `<div class="card danger">could not reach the job API: ${esc(err.message)}</div>`;
@@ -131,6 +133,7 @@ export async function render(mount, route = "") {
         { ...emptyAttack(), mode: "mask", mask: "?u?l?l?l?d?d?d?d" },
       ],
       maxAttacks,
+      picker: { supertasks, load: fetchSupertaskAttacks },
       colors: CURVES.map((c) => c.color),
       hint: `Up to ${maxAttacks} attacks — every ordering scored exactly up to 10 attacks,
              by beam search above that.`,
