@@ -1,6 +1,6 @@
 import re
-import shlex
 from dataclasses import dataclass
+from pathlib import Path
 
 import hashtopolis
 
@@ -61,3 +61,10 @@ def parse_pretask(pretask: Pretask) -> Attack:
         mask="",
         charsets=(),
     )
+
+
+def find_file(file: str) -> Path:
+    # Finds the best match on the corpse installation for the filename.
+    # This function can be expanded to fit your particular setup, here it is used
+    # because there are differences between hashtopolis' file paths and those of corpse.
+    return Path(file)
