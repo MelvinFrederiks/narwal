@@ -2,10 +2,13 @@ import re
 import shlex
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Optional
 
 import hashtopolis
+from fastapi import HTTPException
 
 from backend.jobs.spec import MODES, Attack
+from backend.routes.wordlists import _resolve
 
 
 @dataclass(frozen=True)
@@ -131,8 +134,31 @@ def parse_pretask(pretask: Pretask) -> Attack:
     )
 
 
-def find_file(file: str) -> Path:
-    # Finds the best match on the corpse installation for the filename.
+def find_file(file: str, check: bool = True) -> Optional[Path]:
+    # Finds the best match for file, check versioned dicts.
     # This function can be expanded to fit your particular setup, here it is used
     # because there are differences between hashtopolis' file paths and those of corpse.
-    return Path(file)
+    if not check:
+        # For testing purposes, if check is Flase, return the path verbatim.
+        return Path(file)
+    # Otherwise: find a file which exists.
+    try:
+        # If the file resolves directly, we are done
+        return _resolve(file)
+    except HTTPException:
+        pass
+    # Otherwise, try a versioned name (wordlist.version.dict)
+    re_match = re.search(r"^(\w+)\.\d+\.dict", file)
+    if re_match:
+        try:
+            return _resolve(re_match.group(1) + ".dict")
+        except HTTPException:
+            pass
+    return None
+
+
+def get_attacks(supertask: Supertask) -> list[Attack]:
+    # Takes as input a supertask (without prefetched pretasks), and outputs a list of
+    # narwal-compatible attacks.
+    supertask = get_supertask_pretasks(supertask)
+    return [parse_pretask(pretask) for pretask in supertask.pretasks]

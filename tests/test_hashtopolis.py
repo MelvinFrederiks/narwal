@@ -39,7 +39,7 @@ def test_pretask_parser_wordlist_simple():
         label="test_hashtopolis wordlist rockyou",
         mode="wordlist",
         attack_mode=0,
-        wordlist=find_file("rockyou.txt"),
+        wordlist=find_file("rockyou.txt", check=False),
     )
 
     assert parse_pretask(wordlist) == wordlist_attack
@@ -56,8 +56,8 @@ def test_pretask_parser_wordlist_rules():
         label="test_hashtopolis rockyou + best66",
         mode="wordlist",
         attack_mode=0,
-        wordlist=find_file("rockyou.txt"),
-        rules=(find_file("best66.rule"),),
+        wordlist=find_file("rockyou.txt", check=False),
+        rules=(find_file("best66.rule", check=False),),
     )
 
     assert parse_pretask(rule) == rule_attack
