@@ -11,8 +11,8 @@ except Exception:  # not installed or unconfigured; only the API-backed function
 from fastapi import HTTPException
 
 from backend.jobs.spec import MODES, Attack
-from backend.routes.rules import _resolve as _resolve_rule
-from backend.routes.wordlists import _resolve
+from backend.routes.rules import list_files as list_rules
+from backend.routes.wordlists import list_files as list_wordlists
 
 
 @dataclass(frozen=True)
@@ -146,7 +146,9 @@ def find_file(file: str, check: bool = True, rule: bool = False) -> Optional[Pat
     if not check:
         # For testing purposes, if check is False, return the path verbatim.
         return Path(file)
-    resolve = _resolve_rule if rule else _resolve
+    list_files = list_rules if rule else list_wordlists
+    # Candidates will be checked 'in order': first candidate is checked first and, if a match/resolution is found,
+    # use it greedily even if later matches might have 'better' resolutions.
     candidates = [file]
     # Otherwise, try a versioned name (wordlist.version.dict)
     re_match = re.search(r"^(\w+)\.\d+\.dict", file)
@@ -154,12 +156,14 @@ def find_file(file: str, check: bool = True, rule: bool = False) -> Optional[Pat
         candidates.append(re_match.group(1) + ".dict")
     for candidate in candidates:
         try:
-            path = resolve(candidate)
+            result = list_files(candidate)
+            if result.get("enabled"):
+                files = result.get("files")
+                if files is not None:
+                    # Match first.
+                    return Path(files[0])
         except HTTPException:
             continue
-        # _resolve only guards against escaping the root, not against missing files.
-        if path.is_file():
-            return path
     return None
 
 
