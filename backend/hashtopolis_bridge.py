@@ -11,7 +11,9 @@ except Exception:  # not installed or unconfigured; only the API-backed function
 from fastapi import HTTPException
 
 from backend.jobs.spec import MODES, Attack
+from backend.routes.rules import _resolve as _resolve_rule
 from backend.routes.rules import list_files as list_rules
+from backend.routes.wordlists import _resolve as _resolve_wordlist
 from backend.routes.wordlists import list_files as list_wordlists
 
 
@@ -147,6 +149,7 @@ def find_file(file: str, check: bool = True, rule: bool = False) -> Optional[Pat
         # For testing purposes, if check is False, return the path verbatim.
         return Path(file)
     list_files = list_rules if rule else list_wordlists
+    resolve = _resolve_rule if rule else _resolve_wordlist
     # Candidates will be checked 'in order': first candidate is checked first and, if a match/resolution is found,
     # use it greedily even if later matches might have 'better' resolutions.
     candidates = [file]
@@ -159,9 +162,10 @@ def find_file(file: str, check: bool = True, rule: bool = False) -> Optional[Pat
             result = list_files(candidate)
             if result.get("enabled"):
                 files = result.get("files", [])
+                # files = [{'path': '/path/to/file', 'size': <size in bytes}, {...}, ...]
                 if len(files) != 0:
                     # Match first if exists
-                    return Path(files[0])
+                    return resolve(files[0].get("path"))
         except HTTPException:
             continue
     return None
