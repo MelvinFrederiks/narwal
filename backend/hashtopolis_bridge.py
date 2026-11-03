@@ -158,9 +158,9 @@ def find_file(file: str, check: bool = True, rule: bool = False) -> Optional[Pat
         try:
             result = list_files(candidate)
             if result.get("enabled"):
-                files = result.get("files")
-                if files is not None:
-                    # Match first.
+                files = result.get("files", [])
+                if len(files) != 0:
+                    # Match first if exists
                     return Path(files[0])
         except HTTPException:
             continue
