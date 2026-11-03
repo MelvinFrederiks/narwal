@@ -16,7 +16,11 @@ export const MODE_LABELS = {
   "mask": "Mask / brute force",
   "hybrid-wm": "Hybrid — wordlist + mask",
   "hybrid-mw": "Hybrid — mask + wordlist",
+  "dynamic-mask": "Dynamic mask (length range)",
 };
+
+// Mirrors backend/jobs/spec.py::DYNAMIC_CHARSETS.
+export const DYNAMIC_CHARSETS = ["?l", "?u", "?d", "?s", "?a", "?b", "?h", "?H"];
 
 export const STATUS_PILL = {
   queued: "pill-info",
@@ -30,7 +34,8 @@ export const STATUS_PILL = {
 export const kindOf = (job) => job?.spec?.kind || "mergeability";
 
 export function emptyAttack() {
-  return { label: "", mode: "wordlist", wordlist: "", rules: [], mask: "", charsets: {} };
+  return { label: "", mode: "wordlist", wordlist: "", rules: [], mask: "", charsets: {},
+           dyn_charset: "?d", dyn_min: 1, dyn_max: 4 };
 }
 
 // Which custom charsets (?1–?4) a mask references, in order. Mirrors the token
@@ -179,8 +184,9 @@ export function attackBuilder({
   }
 
   function attackHtml(a, i) {
-    const needsWordlist = a.mode !== "mask";
-    const needsMask = a.mode !== "wordlist";
+    const dyn = a.mode === "dynamic-mask";
+    const needsWordlist = a.mode !== "mask" && !dyn;
+    const needsMask = a.mode !== "wordlist" && !dyn;
     return `
       <div class="card" data-attack="${i}">
         <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
@@ -210,6 +216,19 @@ export function attackBuilder({
                 ${cfg.rules.map((r) => `<option value="${esc(r)}">`).join("")}
               </datalist>
               <span class="sub" style="margin:0;font-size:11px">max ${cfg.max_rules}</span>
+            </span>` : ""}
+          ${dyn ? `
+            <label class="attack-option" style="color:var(--text-secondary)">Charset</label>
+            <span style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <select data-field="dyn_charset" style="max-width:100px">
+                ${DYNAMIC_CHARSETS.map((c) =>
+                  `<option value="${c}"${(a.dyn_charset || "?d") === c ? " selected" : ""}>${c}</option>`).join("")}
+              </select>
+              <label style="color:var(--text-secondary)">min</label>
+              <input type="number" min="1" step="1" data-field="dyn_min" value="${esc(String(a.dyn_min ?? 1))}" style="width:70px"/>
+              <label style="color:var(--text-secondary)">max</label>
+              <input type="number" min="1" step="1" data-field="dyn_max" value="${esc(String(a.dyn_max ?? 4))}" style="width:70px"/>
+              <span class="sub" style="margin:0;font-size:11px">every length min–max, one hashcat run (--increment)</span>
             </span>` : ""}
           ${needsMask ? `
             <label class="attack-option" style="color:var(--text-secondary)">Mask</label>
@@ -383,6 +402,12 @@ export function attackBuilder({
 export function attacksToSpec(attacks) {
   return attacks.map((a, i) => {
     const out = { label: a.label.trim() || `attack ${i + 1}`, mode: a.mode };
+    if (a.mode === "dynamic-mask") {
+      out.charset = a.dyn_charset || "?d";
+      out.min = Number.parseInt(a.dyn_min, 10);
+      out.max = Number.parseInt(a.dyn_max, 10);
+      return out;
+    }
     if (a.mode !== "mask") out.wordlist = a.wordlist.trim();
     if (a.mode !== "wordlist") {
       out.mask = a.mask.trim();

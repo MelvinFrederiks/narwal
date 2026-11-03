@@ -37,7 +37,7 @@ def job_config() -> dict:
     """
     return {
         "enabled": config.wordlists_root is not None,
-        "modes": sorted(spec_mod.MODES),
+        "modes": sorted([*spec_mod.MODES, spec_mod.DYNAMIC_MODE]),
         "kinds": list(spec_mod.KINDS),
         "rules": [],  # Will be set on page load for now
         "max_attacks": spec_mod.MAX_ATTACKS,

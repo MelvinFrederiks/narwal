@@ -62,6 +62,12 @@ MODES = {
     "hybrid-mw": 7,  # mask + wordlist appended
 }
 
+# Spec-level alias, not a hashcat mode (hence not in MODES): "try every length
+# min..max over one charset". It becomes an ordinary mask attack run with
+# --increment, so it stays a single attack all the way down.
+DYNAMIC_MODE = "dynamic-mask"
+DYNAMIC_CHARSETS = ("?l", "?u", "?d", "?s", "?a", "?b", "?h", "?H")
+
 # An ordering job scores every permutation of its attacks, so its cap is the
 # factorial one from backend/jobs/ordering.py rather than MAX_ATTACKS.
 KINDS = ("mergeability", "ordering")
@@ -232,12 +238,42 @@ def _validate_increment(raw: dict) -> tuple[int | None, int | None]:
     return lo, hi
 
 
+def _validate_dynamic(raw: dict, index: int) -> Attack:
+    """`dynamic-mask`: charset token + min/max length -> mask attack + --increment."""
+    charset = raw.get("charset")
+    if charset not in DYNAMIC_CHARSETS:
+        raise SpecError(f"attack {index + 1}: charset must be one of {', '.join(DYNAMIC_CHARSETS)}")
+    for key in ("wordlist", "mask"):
+        if raw.get(key):
+            raise SpecError(f"attack {index + 1}: {key} is not used by mode '{DYNAMIC_MODE}'")
+    if raw.get("rules"):
+        raise SpecError(f"attack {index + 1}: rules are only supported for mode 'wordlist'")
+    lo, hi = raw.get("min"), raw.get("max")
+    for v, n in ((lo, "min"), (hi, "max")):
+        if not isinstance(v, int) or isinstance(v, bool) or not 1 <= v <= MAX_MASK_LEN:
+            raise SpecError(f"attack {index + 1}: {n} must be an integer between 1 and {MAX_MASK_LEN}")
+    if lo > hi:
+        raise SpecError(f"attack {index + 1}: min must not exceed max")
+    return Attack(
+        label=_validate_label(raw.get("label"), index),
+        mode="mask",
+        attack_mode=MODES["mask"],
+        mask=_validate_mask(charset * hi, set()),
+        increment_min=lo,
+        increment_max=hi,
+    )
+
+
 def _validate_attack(raw: object, index: int, suspect_set: frozenset[Path] = frozenset()) -> Attack:
     if not isinstance(raw, dict):
         raise SpecError(f"attack {index + 1} must be an object")
     mode = raw.get("mode")
+    if mode == DYNAMIC_MODE:
+        return _validate_dynamic(raw, index)
     if mode not in MODES:
-        raise SpecError(f"attack {index + 1}: mode must be one of {', '.join(sorted(MODES))}")
+        raise SpecError(
+            f"attack {index + 1}: mode must be one of {', '.join(sorted([*MODES, DYNAMIC_MODE]))}"
+        )
 
     label = _validate_label(raw.get("label"), index)
     charsets = _validate_charsets(raw.get("charsets"))
