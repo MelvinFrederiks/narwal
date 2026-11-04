@@ -169,14 +169,14 @@ def build_argv(
         if attack.increment_max is not None:
             argv += ["--increment-max", str(attack.increment_max)]
     # For a suspect dictionary, ask hashcat to log the base word behind each
-    # crack (debug-mode 2 = Original-Word only, one line per crack in outfile
+    # crack (debug-mode 4 = Original-Word:Rule:Recovered-word, one line per crack in outfile
     # order). The worker uses it to tell a verbatim dict hit (base == plain)
     # from a genuine rule derivation (base != plain) — see run_attack and
     # backend/jobs/spec.py::Attack.suspect. Only meaningful with rules; hashcat
     # requires -r for debug-mode, which the caller guarantees before passing a
     # debug_file.
     if debug_file is not None:
-        argv += ["--debug-mode", "2", "--debug-file", str(debug_file)]
+        argv += ["--debug-mode", "4", "--debug-file", str(debug_file)]
     argv += config.hashcat_extra
 
     # Positional arguments, in the order each attack mode expects. The goal
@@ -264,17 +264,25 @@ def _contaminated(
     # Outfile lines are `plain:crack_pos`; the debug file is Original-Word only
     # (--debug-mode 2), so strip crack_pos before pairing them up.
     plains = [_split_crackpos(line)[0] for line in _read_lines_ordered(outfile)]
-    bases = _read_lines_ordered(debug_file)
-    if len(plains) != len(bases):
+    debug_lines = _read_lines_ordered(debug_file)
+    if len(plains) != len(debug_lines):
         # Should not happen — both are written per crack. If it does, stay
         # conservative: credit nothing from this suspect dictionary rather than
         # risk crediting a verbatim leak.
         log.warning(
             "attack %s: debug file has %d lines but outfile has %d; treating all "
             "recovered as verbatim contamination",
-            attack.label, len(bases), len(plains),
+            attack.label,
+            len(debug_lines),
+            len(plains),
         )
         return set(recovered)
+    debug_info = []
+    for line in debug_lines:
+        base, tmp = line.split(b":", maxsplit=1)
+        rule, plain = tmp.rsplit(b":", maxsplit=1)
+        debug_info.append((base, rule, plain))
+    bases = [base for base, _, _ in debug_info]
     derived = {plain for plain, base in zip(plains, bases) if base != plain}
     return set(recovered) - derived
 
