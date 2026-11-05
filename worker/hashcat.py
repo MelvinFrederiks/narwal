@@ -261,8 +261,9 @@ def _contaminated(
     if not used_debug:
         return set(recovered)
 
-    # Outfile lines are `plain:crack_pos`; the debug file is Original-Word only
-    # (--debug-mode 2), so strip crack_pos before pairing them up.
+    # Outfile lines are `plain:crack_pos`; the debug file lines are
+    # <Original>:rule:<recovered plaintext> (--debug-mode 4), so strip
+    # crack_pos before pairing them up.
     plains = [_split_crackpos(line)[0] for line in _read_lines_ordered(outfile)]
     debug_lines = _read_lines_ordered(debug_file)
     if len(plains) != len(debug_lines):
@@ -277,8 +278,13 @@ def _contaminated(
             len(plains),
         )
         return set(recovered)
+    # The above is a sanity check. If it passes, use the debug output to detect contamination
+    # Check if original == plain.
+    # We purposefully do not convert $HEX: if one of original/plain is HEX'd and the other is not,
+    # they are different. Otherwise hashcat would encode both the same.
     debug_info = []
     for line in debug_lines:
+        # This is not ambiguous: if the word (base or plain) contains a colon, hashcat puts it in $HEX format.
         base, tmp = line.split(b":", maxsplit=1)
         rule, plain = tmp.rsplit(b":", maxsplit=1)
         debug_info.append((base, rule, plain))
