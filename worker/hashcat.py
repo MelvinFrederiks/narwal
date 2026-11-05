@@ -282,8 +282,8 @@ def _contaminated(
         base, tmp = line.split(b":", maxsplit=1)
         rule, plain = tmp.rsplit(b":", maxsplit=1)
         debug_info.append((base, rule, plain))
-    bases = [base for base, _, _ in debug_info]
-    derived = {plain for plain, base in zip(plains, bases) if base != plain}
+    # Use info from debug mode 4 to determine derived words
+    derived = {plain for base, _, plain in debug_info if plain != base}
     return set(recovered) - derived
 
 
