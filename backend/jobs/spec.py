@@ -77,7 +77,7 @@ MAX_ATTACKS = 8
 MAX_RULES = 4
 MAX_MASK_LEN = 256      # hashcat -m 99999 Password.Len.Max
 MAX_LABEL_LEN = 60
-LABEL_OK = re.compile(r"^[\w .+\-/()]+$")
+LABEL_OK = re.compile(r"^[\w .+\-/()\[\]:]+$")
 
 
 @dataclass(frozen=True)
@@ -222,7 +222,9 @@ def _validate_label(raw: object, index: int) -> str:
     if len(label) > MAX_LABEL_LEN:
         raise SpecError(f"label is over {MAX_LABEL_LEN} characters")
     if not LABEL_OK.match(label):
-        raise SpecError(f"label {label!r} has characters outside letters, digits and . + - _ / ( )")
+        raise SpecError(
+            f"label {label!r} has characters outside letters, digits and . + - _ : / ( ) [ ]"
+        )
     return label
 
 
