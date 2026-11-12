@@ -8,6 +8,7 @@ license = { text = "MIT" }
 dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.32",
+    "hashtopolis>=0.1.0"
 ]
 
 [project.optional-dependencies]

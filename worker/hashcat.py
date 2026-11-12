@@ -169,14 +169,14 @@ def build_argv(
         if attack.increment_max is not None:
             argv += ["--increment-max", str(attack.increment_max)]
     # For a suspect dictionary, ask hashcat to log the base word behind each
-    # crack (debug-mode 2 = Original-Word only, one line per crack in outfile
+    # crack (debug-mode 4 = Original-Word:Rule:Recovered-word, one line per crack in outfile
     # order). The worker uses it to tell a verbatim dict hit (base == plain)
     # from a genuine rule derivation (base != plain) — see run_attack and
     # backend/jobs/spec.py::Attack.suspect. Only meaningful with rules; hashcat
     # requires -r for debug-mode, which the caller guarantees before passing a
     # debug_file.
     if debug_file is not None:
-        argv += ["--debug-mode", "2", "--debug-file", str(debug_file)]
+        argv += ["--debug-mode", "4", "--debug-file", str(debug_file)]
     argv += config.hashcat_extra
 
     # Positional arguments, in the order each attack mode expects. The goal
@@ -261,21 +261,35 @@ def _contaminated(
     if not used_debug:
         return set(recovered)
 
-    # Outfile lines are `plain:crack_pos`; the debug file is Original-Word only
-    # (--debug-mode 2), so strip crack_pos before pairing them up.
+    # Outfile lines are `plain:crack_pos`; the debug file lines are
+    # <Original>:rule:<recovered plaintext> (--debug-mode 4), so strip
+    # crack_pos before pairing them up.
     plains = [_split_crackpos(line)[0] for line in _read_lines_ordered(outfile)]
-    bases = _read_lines_ordered(debug_file)
-    if len(plains) != len(bases):
+    debug_lines = _read_lines_ordered(debug_file)
+    if len(plains) != len(debug_lines):
         # Should not happen — both are written per crack. If it does, stay
         # conservative: credit nothing from this suspect dictionary rather than
         # risk crediting a verbatim leak.
         log.warning(
             "attack %s: debug file has %d lines but outfile has %d; treating all "
             "recovered as verbatim contamination",
-            attack.label, len(bases), len(plains),
+            attack.label,
+            len(debug_lines),
+            len(plains),
         )
         return set(recovered)
-    derived = {plain for plain, base in zip(plains, bases) if base != plain}
+    # The above is a sanity check. If it passes, use the debug output to detect contamination
+    # Check if original == plain.
+    # We purposefully do not convert $HEX: if one of original/plain is HEX'd and the other is not,
+    # they are different. Otherwise hashcat would encode both the same.
+    debug_info = []
+    for line in debug_lines:
+        # This is not ambiguous: if the word (base or plain) contains a colon, hashcat puts it in $HEX format.
+        base, tmp = line.split(b":", maxsplit=1)
+        rule, plain = tmp.rsplit(b":", maxsplit=1)
+        debug_info.append((base, rule, plain))
+    # Use info from debug mode 4 to determine derived words
+    derived = {plain for base, _, plain in debug_info if plain != base}
     return set(recovered) - derived
 
 

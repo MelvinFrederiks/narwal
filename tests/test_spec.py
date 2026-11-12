@@ -357,3 +357,31 @@ def test_suspect_wordlists_defaults_to_empty(library):
 def test_suspect_wordlists_must_be_a_list(library):
     with pytest.raises(spec_mod.SpecError):
         spec_mod.validate(base_spec(suspect_wordlists="rockyou.txt"))
+
+
+# ── dynamic mask ────────────────────────────────────────────────────────────
+
+def _dyn(**over) -> dict:
+    a = {"label": "dust", "mode": "dynamic-mask", "charset": "?d", "min": 1, "max": 4}
+    a.update(over)
+    return a
+
+
+def test_dynamic_mask_becomes_one_increment_mask_attack(library):
+    out = spec_mod.validate(base_spec(attacks=[
+        {"label": "dict", "mode": "wordlist", "wordlist": "rockyou.txt"}, _dyn()]))
+    assert len(out.attacks) == 2
+    a = out.attacks[1]
+    assert (a.mode, a.attack_mode, a.mask) == ("mask", 3, "?d?d?d?d")
+    assert (a.increment_min, a.increment_max) == (1, 4)
+
+
+@pytest.mark.parametrize("over", [
+    {"charset": "?x"}, {"charset": "?1"}, {"min": 0}, {"min": 5}, {"max": 257},
+    {"min": True}, {"max": "4"}, {"min": None}, {"rules": ["best64.rule"]},
+    {"mask": "?d"}, {"wordlist": "rockyou.txt"},
+])
+def test_dynamic_mask_rejects_bad_params(library, over):
+    with pytest.raises(spec_mod.SpecError):
+        spec_mod.validate(base_spec(attacks=[
+            {"label": "dict", "mode": "wordlist", "wordlist": "rockyou.txt"}, _dyn(**over)]))

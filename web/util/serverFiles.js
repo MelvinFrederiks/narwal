@@ -29,6 +29,30 @@ export async function listRuleFiles(ext="") {
   }
 }
 
+// Hashtopolis supertasks the attack picker can offer ([{ id, name }]). Like the
+// file listings it never throws: an unreachable or unconfigured Hashtopolis
+// just means no picker.
+export async function listSupertasks() {
+  try {
+    const res = await fetch("/api/hashtopolis/supertasks");
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.enabled ? data.supertasks : [];
+  } catch {
+    return [];
+  }
+}
+
+// One supertask's attacks in the builder's shape, plus the names of any files
+// the server could not find: { attacks, unresolved }. Throws with a message
+// worth showing.
+export async function fetchSupertaskAttacks(id) {
+  const res = await fetch(`/api/hashtopolis/supertasks/${encodeURIComponent(id)}/attacks`);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.detail || `server said ${res.status}`);
+  return data;
+}
+
 // Fetches a server-side file and wraps it as a real File object, so callers
 // can feed it straight into the same code path as a browser-picked upload.
 export async function fetchServerFile(path, ext = "") {

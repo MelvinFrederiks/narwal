@@ -16,7 +16,11 @@ export const MODE_LABELS = {
   "mask": "Mask / brute force",
   "hybrid-wm": "Hybrid — wordlist + mask",
   "hybrid-mw": "Hybrid — mask + wordlist",
+  "dynamic-mask": "Dynamic mask (length range)",
 };
+
+// Mirrors backend/jobs/spec.py::DYNAMIC_CHARSETS.
+export const DYNAMIC_CHARSETS = ["?l", "?u", "?d", "?s", "?a", "?b", "?h", "?H"];
 
 export const STATUS_PILL = {
   queued: "pill-info",
@@ -30,7 +34,8 @@ export const STATUS_PILL = {
 export const kindOf = (job) => job?.spec?.kind || "mergeability";
 
 export function emptyAttack() {
-  return { label: "", mode: "wordlist", wordlist: "", rules: [], mask: "", charsets: {} };
+  return { label: "", mode: "wordlist", wordlist: "", rules: [], mask: "", charsets: {},
+           dyn_charset: "?d", dyn_min: 1, dyn_max: 4 };
 }
 
 // Which custom charsets (?1–?4) a mask references, in order. Mirrors the token
@@ -54,10 +59,14 @@ export function maskCharsetRefs(mask) {
 // values are mirrored into state on every keystroke rather than read at submit
 // time — a re-render would otherwise lose whatever had been typed.
 //
+// `picker`, if given, is `{ supertasks: [{ id, name }], load(id) }`: a searchable
+// box over the Attacks list that replaces the attacks with whatever `load`
+// resolves to (`{ attacks, unresolved }`). Nothing is queued by picking.
+//
 // `onSubmit({ name, goal, maxRuntime, attacks })` should throw an Error whose
 // message is worth showing; it gets rendered under the buttons.
 export function attackBuilder({
-  mount, cfg, files, prefix, attacks, maxAttacks, colors = [], hint,
+  mount, cfg, files, prefix, attacks, maxAttacks, colors = [], hint, picker,
   submitLabel = "Queue analysis", onSubmit,
 }) {
   const state = {
@@ -68,6 +77,9 @@ export function attackBuilder({
     // removing an attack triggers.
     derived: [], _derivedDraft: "",
     attacks, submitting: false, error: "",
+    // Picker state: the half-typed supertask name, and what the last load
+    // could not resolve (files hashtopolis names that this server lacks).
+    _pickerDraft: "", pickerBusy: false, warnings: [],
   };
   const id = (suffix) => `${prefix}-${suffix}`;
   const q = (suffix) => mount.querySelector(`#${id(suffix)}`);
@@ -104,7 +116,15 @@ export function attackBuilder({
         </span>
       </div>
 
-      <div style="font-weight:500;margin-bottom:8px">Attacks</div>
+      <div style="display:flex;gap:12px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
+        <span style="font-weight:500">Attacks</span>
+        ${picker?.supertasks.length ? pickerHtml() : ""}
+      </div>
+      ${state.warnings.length ? `
+        <div class="card warning" style="margin-bottom:10px">
+          <b>Could not find ${state.warnings.length === 1 ? "this file" : "these files"} on the server:</b>
+          ${state.warnings.map((w) => `<code style="margin-left:6px">${esc(w)}</code>`).join("")}
+        </div>` : ""}
       <div class="card-list" id="${id("attacks")}">
         ${state.attacks.map((a, i) => attackHtml(a, i)).join("")}
       </div>
@@ -121,9 +141,52 @@ export function attackBuilder({
     wire();
   }
 
+  function pickerHtml() {
+    return `
+      <span style="margin-left:auto;display:flex;gap:6px;align-items:center;font-size:12px">
+        <span style="color:var(--text-tertiary);white-space:nowrap">load from Hashtopolis supertask:</span>
+        <input type="text" id="${id("picker")}" list="${id("supertasks")}" placeholder="search…"
+               style="min-width:220px;padding:4px 6px" value="${esc(state._pickerDraft)}"
+               ${state.pickerBusy ? "disabled" : ""}/>
+        <datalist id="${id("supertasks")}">
+          ${picker.supertasks.map((s) => `<option value="${esc(s.name)}">`).join("")}
+        </datalist>
+        <button id="${id("picker-load")}" style="padding:4px 10px" ${state.pickerBusy ? "disabled" : ""}>
+          ${state.pickerBusy ? "loading…" : "Load"}
+        </button>
+      </span>`;
+  }
+
+  async function loadSupertask() {
+    const name = q("picker").value.trim();
+    const match = picker.supertasks.find((s) => s.name === name);
+    if (!match) return;
+    readTop();
+    state._pickerDraft = name;
+    state.pickerBusy = true;
+    state.error = "";
+    render();
+    try {
+      const { attacks: loaded, unresolved } = await picker.load(match.id);
+      const next = loaded.slice(0, maxAttacks).map((a) => ({ ...emptyAttack(), ...a }));
+      while (next.length < 2) next.push(emptyAttack());
+      state.attacks = next;
+      state.warnings = [...new Set(unresolved)];
+      if (loaded.length > maxAttacks) {
+        state.warnings.push(`(${loaded.length - maxAttacks} attack(s) beyond the limit of ${maxAttacks} were not loaded)`);
+      }
+    } catch (err) {
+      state.error = err.message;
+    } finally {
+      state.pickerBusy = false;
+      render();
+    }
+  }
+
   function attackHtml(a, i) {
-    const needsWordlist = a.mode !== "mask";
-    const needsMask = a.mode !== "wordlist";
+    const dyn = a.mode === "dynamic-mask";
+    const needsWordlist = a.mode !== "mask" && !dyn;
+    const needsMask = a.mode !== "wordlist" && !dyn;
     return `
       <div class="card" data-attack="${i}">
         <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
@@ -153,6 +216,19 @@ export function attackBuilder({
                 ${cfg.rules.map((r) => `<option value="${esc(r)}">`).join("")}
               </datalist>
               <span class="sub" style="margin:0;font-size:11px">max ${cfg.max_rules}</span>
+            </span>` : ""}
+          ${dyn ? `
+            <label class="attack-option" style="color:var(--text-secondary)">Charset</label>
+            <span style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <select data-field="dyn_charset" style="max-width:100px">
+                ${DYNAMIC_CHARSETS.map((c) =>
+                  `<option value="${c}"${(a.dyn_charset || "?d") === c ? " selected" : ""}>${c}</option>`).join("")}
+              </select>
+              <label style="color:var(--text-secondary)">min</label>
+              <input type="number" min="1" step="1" data-field="dyn_min" value="${esc(String(a.dyn_min ?? 1))}" style="width:70px"/>
+              <label style="color:var(--text-secondary)">max</label>
+              <input type="number" min="1" step="1" data-field="dyn_max" value="${esc(String(a.dyn_max ?? 4))}" style="width:70px"/>
+              <span class="sub" style="margin:0;font-size:11px">every length min–max, one hashcat run (--increment)</span>
             </span>` : ""}
           ${needsMask ? `
             <label class="attack-option" style="color:var(--text-secondary)">Mask</label>
@@ -278,6 +354,15 @@ export function attackBuilder({
       }
     }
 
+    if (picker?.supertasks.length) {
+      const input = q("picker");
+      input.addEventListener("input", () => { state._pickerDraft = input.value; });
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") { e.preventDefault(); loadSupertask(); }
+      });
+      q("picker-load").addEventListener("click", loadSupertask);
+    }
+
     q("add").addEventListener("click", () => {
       readTop();
       state.attacks.push(emptyAttack());
@@ -317,6 +402,12 @@ export function attackBuilder({
 export function attacksToSpec(attacks) {
   return attacks.map((a, i) => {
     const out = { label: a.label.trim() || `attack ${i + 1}`, mode: a.mode };
+    if (a.mode === "dynamic-mask") {
+      out.charset = a.dyn_charset || "?d";
+      out.min = Number.parseInt(a.dyn_min, 10);
+      out.max = Number.parseInt(a.dyn_max, 10);
+      return out;
+    }
     if (a.mode !== "mask") out.wordlist = a.wordlist.trim();
     if (a.mode !== "wordlist") {
       out.mask = a.mask.trim();
